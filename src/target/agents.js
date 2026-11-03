@@ -95,6 +95,10 @@ export async function breaker({ issue, diff, context, repro }) {
   const user = `Bug report: ${issue.text}\n\nPatch:\n${diff}\n` + (repro ? `\nReproduction test already used (${repro.path}):\n${repro.content.slice(0, 2500)}\n` : '') + `\nChanged files after patch:\n${listing(context)}`;
   const content = await chat([{ role: 'system', content: BREAK_SYS }, { role: 'user', content: user }], { model: BREAKER_MODEL, json: true, timeoutMs: BREAKER_TIMEOUT_MS, maxTokens: BREAKER_MAX_TOKENS });
   const j = parseJSON(String(content).replace(/```(?:json)?/g, ''));
-  const tests = (Array.isArray(j?.tests) ? j.tests : []).slice(0, 2).map((t) => ({ name: String(t.name || '').slice(0, 120), path: String(t.path || ''), content: String(t.content || '') }));
+  const tests = (Array.isArray(j?.tests) ? j.tests : []).slice(0, 2).map((t, i) => {
+    const content = String(t.content || ''); // code picks the file name (same dir, unique), so an attack never collides with an existing test
+    const p = normalizeReproPath(String(t.path || ''), content).replace(/test_automaintainer_repro\.py$/, `test_automaintainer_attack_${i + 1}.py`).replace(/automaintainer-repro\.test\.ts$/, `automaintainer-attack-${i + 1}.test.ts`);
+    return { name: String(t.name || '').slice(0, 120), path: p, content };
+  });
   return { tests, source: `grok Breaker (${BREAKER_MODEL}) [${MODE_LABEL}]`, ms: Date.now() - t0 };
 }

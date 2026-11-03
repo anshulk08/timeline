@@ -468,7 +468,7 @@ function strip(id) {
     const adm = atks.filter((y) => y.verdict === 'admitted').length, rej = atks.length - adm;
     const killed = res.filter((y) => y.result === 'killed').length, surv = res.filter((y) => y.result !== 'killed').length;
     const v = a.verdict?.result; const done = !!v;
-    const big = !done ? 'under attack' : /ship|surviv|pass/i.test(v) ? 'Survived' : /kill/i.test(v) ? 'Killed' : esc(v);
+    const big = !done ? 'under attack' : !adm && /ship|surviv|pass/i.test(v) ? 'No valid attack' : /ship|surviv|pass/i.test(v) ? 'Survived' : /kill/i.test(v) ? 'Killed' : esc(v);
     s5 = `<div class="stg ${!done ? 'run' : /kill/i.test(v) ? 'bad' : 'ok'}"><div class="sl"><span>Patch Arena</span><span>${all.length} rd</span></div><div class="sv">${big}</div><div class="nums"><span class="num b">${adm} admitted</span><span class="num d">${rej} rejected</span><span class="num g">${surv} survived</span><span class="num r">${killed} killed</span></div></div>`;
   } else if (st.arena) s5 = stg(st.arena.status === 'running' ? 'run' : st.arena.status === 'ok' ? 'ok' : 'bad', 'Patch Arena', esc(st.arena.status), sec(st.arena.ms));
   else s5 = stg('idle', 'Patch Arena', '&ndash;', hello && !hello.breaker ? 'off' : 'Grok Breaker attacks the winner');
