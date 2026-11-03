@@ -1,0 +1,18 @@
+{
+  "name": "complaint-commit",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "reset": "node scripts/reset.js",
+    "start": "node src/server.js",
+    "bench": "node scripts/bench.js",
+    "inject": "node scripts/inject.js",
+    "test:app": "node scripts/test-live.js",
+    "test:gate": "node --test test-gate/",
+    "measure-x-latency": "node scripts/measure-x-latency.js"
+  },
+  "dependencies": {
+    "playwright": "^1.64.1"
+  }
+}

@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Jotter</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <main>
+    <h1>Jotter</h1>
+    <p class="sub">Quick notes. Complain about bugs on X and watch them get fixed.</p>
+    <form id="add-form">
+      <input id="note-input" placeholder="Write a note" autocomplete="off" aria-label="New note">
+      <button id="add-btn" type="submit">Add</button>
+    </form>
+    <input id="search" type="search" placeholder="Search notes" aria-label="Search notes">
+    <ul id="list"></ul>
+    <p class="row"><span id="count">0 notes</span><button id="export-btn" type="button">Export</button></p>
+  </main>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
