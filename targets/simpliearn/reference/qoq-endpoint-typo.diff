@@ -1,0 +1,13 @@
+diff --git a/frontend/components/QoQComparison.tsx b/frontend/components/QoQComparison.tsx
+index 37678eb..84a6c56 100644
+--- a/frontend/components/QoQComparison.tsx
++++ b/frontend/components/QoQComparison.tsx
+@@ -110,7 +110,7 @@ export default function QoQComparison({ currentId, compareId, setCompareId }: Qo
+     let cancelled = false;
+     const fetchComparison = async () => {
+       try {
+-        const res = await fetch(`${API_BASE_URL}/compre`, {
++        const res = await fetch(`${API_BASE_URL}/compare`, {
+           method: "POST",
+           headers: { "Content-Type": "application/json" },
+           body: JSON.stringify({
