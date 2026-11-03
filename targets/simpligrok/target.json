@@ -1,0 +1,123 @@
+{
+  "name": "simpligrok",
+  "repo": "/Users/anshul/grokathon/simpliGrok",
+  "branch": "automaintainer-demo",
+  "display_name": "SimpliEarn + Cross-Examination (simpliGrok)",
+  "tiers": {
+    "auto": {
+      "globs": [
+        "frontend/components/**/*.tsx",
+        "frontend/app/**/*.tsx",
+        "frontend/lib/api-config.ts",
+        "frontend/lib/motion.ts"
+      ],
+      "max_changed_lines": 8
+    },
+    "pr": {
+      "globs": [
+        "RAG/stockchartgenerationV2.py",
+        "RAG/economicIndicatorsV2.py",
+        "RAG/static_summaries.py",
+        "RAG/transcript_retrieval.py",
+        "sentiment/**/*.py",
+        "frontend/lib/*.ts"
+      ]
+    }
+  },
+  "forbid_globs": [
+    "frontend/lib/auth/**",
+    "frontend/lib/supabase/**",
+    "frontend/app/auth/**",
+    "**/supabase/**",
+    "**/.env*",
+    "docs/**",
+    "**/migrations/**",
+    "RAG/api_chatbot.py",
+    "RAG/create_dashboard_endpoint.py",
+    "RAG/env_check.py",
+    "**/package.json",
+    "**/package-lock.json",
+    "**/requirements*.txt",
+    "**/Dockerfile",
+    "cloudbuild.yaml",
+    "setup-secret.sh",
+    "run-local.sh",
+    "start-app*",
+    "**/*.test.ts",
+    "RAG/tests/**",
+    "sentiment/tests/**",
+    "RAG/cross_examination/**",
+    "RAG/.env*"
+  ],
+  "forbid_identifiers": [
+    "supabase",
+    "service_role",
+    "SECRET",
+    "API_KEY",
+    "auth",
+    "admin",
+    "role"
+  ],
+  "tests": [
+    {
+      "name": "frontend-unit",
+      "cwd": "frontend",
+      "cmd": "node --test \"lib/**/*.test.ts\""
+    },
+    {
+      "name": "rag-stock-chart",
+      "cwd": "RAG",
+      "cmd": "python3 -m pytest -q -p no:cacheprovider tests/test_stock_chart_pct.py"
+    },
+    {
+      "name": "cross-examination",
+      "cwd": "RAG",
+      "cmd": ".venv/bin/python -m pytest tests/test_cross_examination_*.py -q --noconftest -p no:cacheprovider"
+    }
+  ],
+  "context_files": [
+    "frontend/components/QoQComparison.tsx",
+    "frontend/lib/api-config.ts",
+    "frontend/lib/api-routes.test.ts",
+    "RAG/stockchartgenerationV2.py",
+    "RAG/tests/test_stock_chart_pct.py"
+  ],
+  "grokbot_verify": {
+    "repo_url": "https://github.com/gt-big-data/simpli-earn",
+    "public_base_sha": "18c545e",
+    "seeded_sha": "1035169",
+    "note": "simpliGrok is private: Grok Bot clones public simpli-earn at 18c545e. seeded_sha is the local simpliGrok seeded commit, used only to compute setup_patch; its diff on the bug files is byte-identical to public aebe2d0."
+  },
+  "seeded_bugs": [
+    {
+      "id": "qoq-endpoint-typo",
+      "complaint": "@SimpliEarn the QoQ comparison tab never loads for me, just spins and then errors out. tried AAPL and NVDA calls, same thing",
+      "expected_tier": "auto",
+      "files": [
+        "frontend/components/QoQComparison.tsx"
+      ],
+      "repro_test": {
+        "name": "frontend-unit",
+        "match": "QoQ comparison posts to the backend /compare route"
+      },
+      "reference_patch": "targets/simpligrok/reference/qoq-endpoint-typo.diff",
+      "grokbot_check": "cd frontend; grep -n \"API_BASE_URL}/compare\" components/QoQComparison.tsx"
+    },
+    {
+      "id": "stock-pct-base",
+      "complaint": "@SimpliEarn NVDA chart says +250% after earnings, that's obviously wrong lol. the stock moved like 3%",
+      "expected_tier": "pr",
+      "files": [
+        "RAG/stockchartgenerationV2.py"
+      ],
+      "repro_test": {
+        "name": "rag-stock-chart",
+        "match": "test_pct_changes_are_relative_to_event_day_open"
+      },
+      "reference_patch": "targets/simpligrok/reference/stock-pct-base.diff",
+      "grokbot_check": "cd RAG; grep -nF \"start_price = perfect_hours_df['Close'].iloc[0]\" stockchartgenerationV2.py",
+      "trap": "The obvious fix (base = first raw close on/after the event day, e.g. close_prices[close_prices.index >= day_start].iloc[0]) crashes on tz-naive vs tz-aware comparison and has no data on weekend/holiday events; the correct base is the backfilled 48h grid open perfect_hours_df['Close'].iloc[0]."
+    }
+  ],
+  "reset": "targets/simpligrok/reset.sh"
+}
