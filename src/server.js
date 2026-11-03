@@ -6,7 +6,7 @@ import { Pipeline } from './pipeline.js';
 import { createListener } from './listener/index.js';
 import { liveShow, liveLog, stopLive } from './shipper.js';
 import { ROOT, RUNS, CONTROL_PORT, APP_PORT } from './paths.js';
-import { MODE, X_HANDLE } from './env.js';
+import { MODE, MODE_LABEL, X_HANDLE } from './env.js';
 
 const srcArg = process.argv.includes('--source') ? process.argv[process.argv.indexOf('--source') + 1] : (MODE === 'REAL' ? 'both' : 'inject');
 const pipeline = new Pipeline();
@@ -15,8 +15,9 @@ const send = (type, data) => { const msg = `event: ${type}\ndata: ${JSON.stringi
 const slim = (r) => ({ ...r, plan: r.plan });
 pipeline.on('update', (r) => send('update', slim(r)));
 pipeline.on('log', (e) => send('log', e));
-pipeline.on('reset', () => send('reset', {}));
-pipeline.on('arena', (e) => send('arena', e)); // Patch Arena events, schema in ARENA.md
+let arenaLog = []; // replayed in `hello` so a reload mid-arena shows the rounds so far
+pipeline.on('reset', () => { arenaLog = []; send('reset', {}); });
+pipeline.on('arena', (e) => { arenaLog.push(e); send('arena', e); }); // Patch Arena events, schema in ARENA.md
 
 const listeners = [];
 const inject = createListener('inject', (p) => pipeline.handlePost(p));
@@ -29,14 +30,14 @@ if (srcArg === 'xsearch' || srcArg === 'both') {
 }
 
 const body = (req) => new Promise((r) => { let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => { try { r(JSON.parse(b || '{}')); } catch { r({}); } }); });
-const html = fs.readFileSync(path.join(ROOT, 'control', 'index.html'));
+const html = () => fs.readFileSync(path.join(ROOT, 'control', 'index.html')); // read per request so UI edits show on reload
 
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x');
-  if (u.pathname === '/') { res.setHeader('content-type', 'text/html; charset=utf-8'); return res.end(html); }
+  if (u.pathname === '/') { res.setHeader('content-type', 'text/html; charset=utf-8'); return res.end(html()); }
   if (u.pathname === '/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-    res.write(`event: hello\ndata: ${JSON.stringify({ mode: pipeline.mode, fixer: pipeline.fixer.name, listeners: listeners.map((l) => l.name), handle: X_HANDLE, reproducer: pipeline.grokbot ? { label: pipeline.grokbot.label, target: pipeline.grokbot.target, publicAppUrl: pipeline.grokbot.cfg.publicAppUrl } : { label: 'Playwright (local)', target: 'local' }, appUrl: `http://localhost:${APP_PORT}`, records: pipeline.records.map(slim) })}\n\n`);
+    res.write(`event: hello\ndata: ${JSON.stringify({ mode: pipeline.mode, modeLabel: MODE_LABEL, fixer: pipeline.fixer.name, breaker: pipeline.breaker ? { name: pipeline.breaker.name, mode: pipeline.breaker.mode } : null, listeners: listeners.map((l) => l.name), handle: X_HANDLE, reproducer: pipeline.grokbot ? { label: pipeline.grokbot.label, target: pipeline.grokbot.target, publicAppUrl: pipeline.grokbot.cfg.publicAppUrl } : { label: 'Playwright (local)', target: 'local' }, appUrl: `http://localhost:${APP_PORT}`, records: pipeline.records.map(slim), arena: arenaLog })}\n\n`);
     clients.add(res); req.on('close', () => clients.delete(res)); return;
   }
   if (u.pathname === '/api/inject' && req.method === 'POST') {

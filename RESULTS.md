@@ -3,6 +3,57 @@
 Measured Nov 2 2026, 5:17–5:20 pm EST, on Anshul's Mac (Node 24.2, Playwright 1.64 headless Chromium).
 **No xAI key was present, so every number below is MOCK or LOCAL-STUB. Nothing has run against real Grok or real X.**
 
+## Update: Nov 2 2026, 6:40 to 7:00 pm EST: arena + grokbot merged into main (all MOCK / LOCAL STUB)
+Still no xAI key. **Every number in this section is MOCK** (canned Fixer diffs, canned Breaker tests) or uses a **LOCAL STUB**
+of Grok Bot (`scripts/fake-grokbot.js`). None of it measures Grok, Grok Bot or X.
+
+Pipeline on main now: listener -> gatekeeper -> reproduce (Grok Bot handoff, or labelled Playwright fallback) -> Fixer patch ->
+diff gate -> staging tests -> **Patch Arena** (Breaker writes tests, referee admits only those that pass on a hidden reference fix,
+kills go back to the Fixer, max 2 attempts) -> ship + post-deploy check/rollback -> reply draft (never posted).
+
+| command (ports overridden via APP_PORT/STAGING_PORT/CONTROL_PORT) | result |
+|---|---|
+| `npm run test:gate` | 7 pass / 0 fail |
+| `npm run test:arena` | 5 pass / 0 fail (referee reject, kill->retry, sandbox, gate paste check, full export story) |
+| `npm run test:grokbot` | 8 pass / 0 fail, all against the local stub (e2e handoff, not-reproduced stop, bad token / timeout / wrong key -> fallback, tunnel parsing) |
+| `node scripts/bench.js 2` | fix success 6/6, attack refusal 10/10, duplicate/feature/noise as expected |
+
+### Bench, MOCK, 2 runs (seconds), Grok Bot off (local Playwright)
+| bug | attempts | reproduce | gate+test (last attempt) | arena | deploy | total run1 / run2 |
+|---|---|---|---|---|---|---|
+| export (CSV) | 2 | 1.67 / 1.57 | 1.01 / 1.08 | 0.14 / 0.14 | 0.15 / 0.21 | **4.22 / 4.38** |
+| add-note | 1 | 0.56 / 0.57 | 1.02 / 1.10 | 1.59 / 1.60 | 0.63 / 0.66 | **3.80 / 3.94** |
+| search | 1 | 0.10 / 0.09 | 1.06 / 1.04 | 0.15 / 0.15 | 0.16 / 0.17 | **1.46 / 1.45** |
+
+Arena rounds (identical in both runs): export round 1: 3 attacks, 2 admitted, 1 rejected by the referee ("every field is wrapped in
+double quotes" fails on the reference fix), 1 kill (comma test kills the naive patch) -> retry; round 2: 1 attack admitted, all 3 admitted
+tests survive -> ship. add-note: 1 browser attack, survived. search: 2 unit attacks, survived. Breaker time is 0.00 s because MOCK is canned.
+The export row changed from the earlier table because the arena branch changed the planted export bug to a CSV trap.
+
+### Live control screen, export complaint injected (`npm start` + Playwright screenshots)
+| run | reproducer | result |
+|---|---|---|
+| after `npm run reset`, run 1 | Playwright (local) | SHIPPED, 2 attempts, 4.28 s |
+| after `npm run reset`, run 2 | Playwright (local) | SHIPPED, 2 attempts, 4.42 s (same admit/reject/kill story) |
+| fake-grokbot `ok`, 2.5 s stub delay | **LOCAL STUB** of Grok Bot | stub REPRODUCED in 4.1 to 4.2 s, Playwright cross-check agrees, SHIPPED in 8.3 to 8.5 s |
+| fake-grokbot `silent`, GROKBOT_TIMEOUT_MS=3000 | Playwright FALLBACK (timeout) | SHIPPED in 7.40 s |
+
+Screenshots: `runs/screens/rep{1,2}-*.png`, `gb-*.png` (stub), `fallback-*.png`; `*-2-mid-arena-kill.png` is captured the moment
+the first patch is killed, `*-3-end.png` at the final verdict, `*-4-1280.png` at laptop width.
+
+### Fixed during integration
+- The arena branch had committed a self-referencing `node_modules` symlink; merging it replaced the real `node_modules` in main. Untracked it and reinstalled (`npm install`).
+- The control server cached `control/index.html` at boot; it now reads it per request.
+- A REAL-mode run pointed at a local `XAI_BASE_URL` was labelled plain "REAL". The header now says "REAL code path, LOCAL STUB endpoint" in that case (`src/env.js` MODE_LABEL).
+- The stub Grok Bot reproducer was rendered in REAL green; it is now amber with "LOCAL STUB, not Grok Bot".
+
+### Still unmeasured
+REAL Grok Fixer/Breaker quality and latency, REAL Grok Bot routine (auth scheme, payload, whether it can POST the callback),
+real cloudflared tunnel, X search lag. Items 5 and 6 below are partly superseded: Grok Bot now has a webhook handoff (GROKBOT.md),
+Cursor is still a stub. Default ports in "How to run" below are still 4000/4001/4100.
+
+## Earlier results (before the merge)
+
 ## Milestones
 | | Status | Evidence |
 |---|---|---|

@@ -15,3 +15,6 @@ export const MODE = process.env.FORCE_MOCK === '1' || !HAS_KEY ? 'MOCK' : 'REAL'
 export const MODEL = process.env.GROK_MODEL || 'grok-4.7';
 export const FAST_MODEL = process.env.GROK_FAST_MODEL || MODEL;
 export const X_HANDLE = process.env.APP_X_HANDLE || 'jotterapp';
+// Honest labelling: a key pointed at a local XAI_BASE_URL is the scripted stub (scripts/stub-xai.js), not Grok.
+export const XAI_STUB = MODE === 'REAL' && /^https?:\/\/(localhost|127\.|\[::1\])/.test(process.env.XAI_BASE_URL || '');
+export const MODE_LABEL = MODE === 'MOCK' ? 'MOCK' : XAI_STUB ? 'REAL code path, LOCAL STUB endpoint' : 'REAL';
