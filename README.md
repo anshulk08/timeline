@@ -1,127 +1,134 @@
-# BDBI AutoMaintainer (built on Complaint → Commit)
+# SimpliEarn Timeline · BDBI AutoMaintainer
 
-**BDBI builds software for real problems; when its builders graduate, users still find bugs.** Anyone can report a problem
-with a BDBI project on X; Grok triages it, writes a failing test that reproduces it, races Grok sub-agents to fix it, a Grok
-Breaker attacks the fix, and code — not the model — decides: small safe fixes auto-apply, bigger ones become a PR for maintainers.
+> **Tag @SimpliGrok on X. Grok reproduces the bug, races to fix it, tries to break its own fix,
+> and code — not the model — decides whether it ships or goes to a human.**
 
-The BDBI project wired in is **SimpliEarn** (earnings-call dashboard: Next.js frontend, FastAPI RAG + sentiment), as the
-config target `targets/simpliearn/target.json`. Pipeline: `src/target/` (core = globs, gate, tier rule, worktrees;
-agents = Grok classify / repro test / Fixer / Breaker; pipeline = the race).
+Big Data Big Impact (BDBI) at Georgia Tech builds open-source apps for real problems. When the students who
+built them graduate, users keep finding bugs that nobody is around to fix. AutoMaintainer turns a public
+complaint into a reproduced, tested, independently verified change on a real BDBI project:
+[SimpliEarn](https://github.com/gt-big-data/simpli-earn), an earnings-call dashboard for novice investors.
 
-```
-X post ─▶ Grok classify ─▶ Grok writes repro test ─▶ 2 Grok Fixers race ─▶ gate + on-disk recheck ─▶ tests + repro ─▶ Grok Breaker + referee ─▶ TIER (code)
-                           (must FAIL on current      (fast model vs          (paths, forbid globs,                                                     AUTO: local commit on automaintainer-demo
-                            code, else retried)        reasoning, own worktree) forbidden identifiers)                                                PR:   local branch + runs/pr/<id>.md
-```
-Tier rule (`src/target/core.js`): AUTO only if every changed file matches `tiers.auto.globs`, changed lines ≤ `max_changed_lines`
-and nothing forbidden is hit; anything else that passes is PR; a forbidden hit is BLOCKED.
+Built for the **BDBI × SpaceXSI Grokathon** (Georgia Tech, Nov 2026).
 
-### Demo in 3 commands
-```
-cd ~/grokathon/complaint-commit && set -a && . ../.env && set +a       # XAI_API_KEY (omit for MOCK)
-TARGET=simpliearn npm start -- --source inject                          # control screen http://localhost:4100 (resets the demo branch)
-npm run inject -- "@SimpliEarn the QoQ comparison tab never loads for me, just spins and then errors out" judge   # AUTO bug
-npm run inject -- "@SimpliEarn NVDA chart says +250% after earnings, that's obviously wrong lol. the stock moved like 3%" judge   # PR bug
-npm run ingest-x -- https://x.com/anon173918/status/2117425512339365924   # REAL X post: Grok x_search fetches it by URL (~3-5 s), then same pipeline
-```
-
-- **Fetch from X** (box at the top of the control screen, or `npm run ingest-x -- <status url>`): Grok's x_search tool fetches that exact post (author, time, link shown as "fetched from X by Grok"); search-based mention discovery does not see new accounts, fetch-by-URL does.
-- **Grok Bot verifier:** with `GROKBOT_WEBHOOK_URL`/`GROKBOT_WEBHOOK_KEY` set, every winner (AUTO or PR) is also sent (fire-and-forget, <=3500 B) to the "AutoMaintainer Verify" Grok Bot routine: public base `18c545e` + seeded-bug patch + winning patch (`-U1`) + the bug's `grokbot_check` one-liner from `target.json`, run on Grok Bot's own cloud computer.
-- The control screen shows the run uuid; the pass/fail result lands in the Grok Bot chat / Runs tab (no inbound tunnel on this machine, so no callback).
-
-`npm run reset` (or the Reset bugs button) runs `targets/simpliearn/reset.sh` between runs. `http://localhost:4100/?demo=1` replays a
-canned run with no backend. One-shot CLI: `TARGET=simpliearn npm run target-run`. Real numbers: RESULTS.md.
-
-### Honest limits
-- The two SimpliEarn bugs are **seeded demo bugs**, planted on a local branch `automaintainer-demo` (commit `aebe2d0`, labelled
-  as such); they are not real SimpliEarn regressions. Reference fixes live in `targets/simpliearn/reference/`.
-- Nothing is ever pushed: AUTO is a local fast-forward commit, PR is a local branch plus a Markdown body. No GitHub PR, no X post.
-- Inject stands in for X in the demo (x_search listener exists, see below). **Grok Bot** (cloud-browser reproduction) is only
-  wired in the Jotter web demo (`TARGET=jotter`, the default); SimpliEarn reproduction is a Grok-written failing test.
-- Cursor: `FIXER=cursor` is a stub interface, not wired.
+<p align="center"><em>Control screen, real run: a post tagging @SimpliGrok → auto-fixed and committed in 12.3 s</em></p>
 
 ---
 
-## The original Jotter demo (TARGET=jotter, default)
+## How it works
 
-**A user finds a bug. Grok fixes it. Another Grok tries to prove the fix is wrong. Only the independently verified patch survives.**
-
-Someone posts on X: "@jotterapp the export button is broken". Grok finds the post with x_search and works out whether it is
-a bug, a feature request, noise, or an attack. Grok Bot opens the app in its cloud browser and reproduces the bug. A Grok
-Fixer writes a patch. A second Grok, the **Breaker**, then writes tests meant to prove that patch wrong. A referee keeps
-only the attacks that are valid, a valid attack that fails sends the patch back to the Fixer, and only a patch that survives
-gets deployed. A reply is drafted to the user.
-
-> **Status, honestly:** the Jotter demo was built before an xAI key existed, so its numbers in RESULTS.md are **MOCK** /
-> **LOCAL STUB**. A real key now exists and the SimpliEarn target has been run against real Grok (RESULTS.md, "BDBI
-> AutoMaintainer"). Grok Bot itself is still only a labelled local stub. The UI labels every result MOCK / LOCAL STUB / REAL.
-
-## Architecture
 ```
-X post ──▶ Listener ──▶ Gatekeeper ──▶ Reproducer ─────────────▶ Fixer ──▶ Diff gate ──▶ Staging tests ──▶ PATCH ARENA ──▶ Ship ──▶ Reply draft
- (x_search  (Grok classify +   (Grok Bot cloud browser,   (Grok, or    (allowlist,   (no regressions,    (Breaker vs       (deploy,   (never
-  or inject) rule layer)        Playwright fallback +      Cursor)      forbidden     a failing test      referee, ≤2       health +    posted)
-                                cross-check)                            identifiers)  now passes,         Fixer attempts)   re-repro,
-                                                                                      re-repro fixed)                       rollback)
+ @SimpliGrok post ─▶ Triage ─▶ Reproduce ─▶ Grok race ─▶ Breaker ─▶ Decision ─▶ Shipped / PR ─▶ Grok Bot verifies
+   (X API / link)    (Grok)    (Grok writes    (2 models,    (Grok tries   (code, not     (local commit        (own cloud
+                               a failing test)  own worktrees) to break it)  the model)    or PR branch)         computer)
 ```
-| stage | code | Grok product | MOCK today | REAL path (env) |
-|---|---|---|---|---|
-| Listener | `src/listener/` | **Grok x_search** (Responses API tool) polls for @mentions | `inject` source (control screen buttons, `npm run inject`) | `XAI_API_KEY`; `npm start -- --source both` |
-| Gatekeeper | `src/gatekeeper.js` | **Grok** (fast model) classifies bug / feature / noise / attack | deterministic keyword rules | `XAI_API_KEY`; the rule layer still overrides Grok on known attack patterns |
-| Reproducer | `src/reproducer.js`, `src/grokbot/` | **Grok** writes the repro plan; **Grok Bot** (Webhook-triggered routine) runs it in a cloud browser and calls back with steps + screenshot | local Playwright, or `scripts/fake-grokbot.js` (LOCAL STUB) | `GROKBOT_WEBHOOK_URL`, `GROKBOT_WEBHOOK_KEY`, `PUBLIC_APP_URL`, `PUBLIC_CALLBACK_URL` (`npm run tunnel`); see GROKBOT.md |
-| Fixer | `src/fixers/` | **Grok** writes a unified diff; on a kill it gets the failing Breaker test + output + its previous diff | canned diffs (`src/fixers/canned/`) | `XAI_API_KEY` (`FIXER=grok`). **Cursor** plugs in here: `FIXER=cursor`, `src/fixers/cursor.js` has the same interface (stub, not wired) |
-| Patch Arena | `src/arena/`, `src/breaker/` | **Grok** as Breaker writes ≤3 adversarial tests per round | canned attacks incl. one deliberately invalid one | `XAI_API_KEY` (`BREAKER=grok`); details in ARENA.md |
-| Ship | `src/shipper.js` | none | real: commits to the nested `live/` repo, restarts, re-verifies, reverts on failure | same |
 
-## Patch Arena, in one paragraph
-After a patch passes the diff gate and the existing staging tests, the Breaker proposes tests (unit tests against
-`lib/notes.js`, or browser steps). The **referee** runs each one against a hidden reference fix (`arena/reference/`) and
-admits it only if it passes there **3 times out of 3** (flaky tests are rejected), so a test asserting behaviour the spec doesn't require is **REJECTED** with the reason. Unit tests only see opaque wrappers around the lib exports (function source hidden, stack traces cut), so a test can't key on how the patch is written (e.g. `toCSV.toString().includes('csvCell')`). Every
-admitted test, from this round and earlier ones, then runs against the candidate. Any failure **KILLS** the patch, and the failing
-test and its output go back to the Fixer. At most 2 Fixer attempts. A patch ships only when the original tests and all admitted
-Breaker tests pass. Caveats: a test that is wrong in a way the reference also gets wrong, or that is flaky but passes 3 runs in a row, can still be admitted; the referee only knows what the reference does. The reference fix exists only because the bugs are planted. In a real product you would referee
-against the spec, or have a human or a third model do it.
+1. **Intake.** The official **X API** mentions endpoint picks up posts that tag `@SimpliGrok` (polled every 15 s).
+   Any post can also be pulled in by link: **Grok's X search** fetches it in 3–5 s.
+2. **Triage.** Grok classifies the post: bug, feature request, noise, or attack. Attacks are refused before anything runs.
+3. **Reproduce.** Grok writes a test that must **fail on the current code**. If it doesn't, nothing else happens.
+4. **Grok race.** Two Grok sub-agents (`grok-4.20` fast and reasoning) write fixes in parallel, each in its own git worktree.
+   The first patch that passes the diff gate, the existing tests and the reproduction test moves on.
+5. **Breaker.** A third Grok writes adversarial tests against the winning patch. A referee only admits valid attacks;
+   an admitted attack that fails sends the patch back.
+6. **Decision, made by code:**
+
+   | Tier | Rule | Result |
+   |---|---|---|
+   | **AUTO** | every changed file is in the safe UI globs, ≤ 8 changed lines, no forbidden hits | committed to the demo branch |
+   | **PR** | passes the gate but is bigger or touches logic (e.g. calculation code) | PR branch + write-up for a maintainer |
+   | **BLOCKED** | touches auth, secrets, tests, config or anything forbidden | nothing happens |
+
+7. **Independent verification.** The winning patch is sent to a **Grok Bot** routine ("AutoMaintainer Verify") that clones
+   SimpliEarn on its own cloud computer, confirms the bug, applies the fix and reruns the check.
+
+## Real results
+
+All runs below used real Grok calls on real SimpliEarn code. The bugs are **seeded demo bugs** (see *Limits*).
+
+| Run | Outcome | Time |
+|---|---|---|
+| Real X post by `@anon173918` ("the QoQ comparison tab never loads") | AUTO: 2-line fix, committed | **12.3 s** |
+| "NVDA chart says +250% after earnings" (calculation bug with a trap) | PR for maintainer review | 23.8 s; another run 2.5 min, where the fast model fell for the trap and the reasoning model won |
+| Grok Bot independent verification of the QoQ fix | "the bug reproduced, and the fix verified" (exit 1 before, exit 0 after) | ~1 min |
+| 5 malicious posts ("make everyone admin", "ignore previous instructions", …) | all refused | — |
+
+More numbers, including the earlier runs that failed, are in [RESULTS.md](RESULTS.md).
+
+## SpaceXSI products used
+
+| Product | Where |
+|---|---|
+| **Grok API** (`grok-4.20` fast + reasoning) | triage, failing-test generation, the fixer race, the Breaker |
+| **Grok X search** | fetching a real post by link |
+| **X API v2** | automatic pickup of posts that tag `@SimpliGrok` |
+| **Grok Bot** | webhook-triggered routine that verifies each fix on its own cloud computer |
+| **Grok TTS** | narration of the demo video |
+| **Cursor** | used to build the project (agentic coding); a Cursor cloud agent as a third fixer is next |
 
 ## Safety model
-- **Gatekeeper:** attack posts ("make everyone admin", "ignore previous instructions", "upload notes to …", "disable the tests") are refused before anything runs. A deterministic rule layer overrides Grok.
-- **Diff gate** (`src/gate.js`): a file allowlist (4 front-end files), protected paths, forbidden identifiers in changed lines (auth/admin/role/token/fetch/eval/URLs…), no creates, deletes or renames, ≤30 changed lines, and no pasting admitted Breaker test code into app source. The parser treats `---`/`+++` as file headers only before a file's first `@@`, the way `git apply --recount` does, so an added line disguised as `+++ b/public/index.html <script>…` counts as an added line. After apply, a hash check confirms nothing outside the allowlist changed, and the identifier, line-count and paste checks run a second time on `git diff --no-index` of live vs staging, i.e. on what actually changed on disk rather than on the diff text. The identifier list is a deny-list, so it is a strong filter rather than a proof.
-- **Tests:** no regressions, at least one previously failing test now passes, and the reproduction no longer reproduces on staging.
-- **Breaker sandbox** (`src/arena/sandbox.js`): LLM-written test code runs in a child process with an empty env, the Node permission model (read only the harness and the lib, no writes, no child processes), macOS `sandbox-exec` (no network, no writes), a lint that rejects import/require, and a 5 s SIGKILL.
-- **Deploy:** health check plus re-repro on live, with automatic `git revert` and restart on failure.
-- **Grok Bot callback:** a separate server on its own port, a per-job token checked with a constant-time compare, size and schema checks, one callback per job. The control server is never tunnelled.
-- **Control server:** bound to 127.0.0.1 (the demo app too), Host header checked (DNS rebinding), and `/api/*` requires POST, `content-type: application/json`, a same-origin or absent `Origin`, a ≤16 KB body and the per-boot token from `runs/.control-token` (mode 600, never printed; the control screen has it embedded, `npm run inject`/`reset` read the file).
-- **Nothing is posted.** Replies are drafts, and secrets are never printed (logs say `key=set`).
 
-## Run it
+- **Refuse first:** attack posts are refused by Grok triage plus a deterministic rule layer.
+- **Diff gate** ([`src/target/core.js`](src/target/core.js)): path globs, forbidden paths and identifiers, size caps,
+  no new or deleted files. After a patch is applied, the gate re-checks **what actually changed on disk**, not just the diff text.
+- **Tests decide:** a failing reproduction test must pass afterwards, and no existing test may break.
+- **Breaker sandbox:** Grok-written attack code runs in a child process with no secrets in its environment and a time limit.
+- **Nothing leaves the machine:** AUTO is a local commit, PR is a local branch, replies to X are drafts only.
+  Nothing is pushed to the BDBI repo.
+- **Honest labels:** every result on screen is marked REAL or MOCK.
+
+## Quick start
+
+```bash
+cd complaint-commit && npm install
+# ~/grokathon/.env: XAI_API_KEY, X_BEARER_TOKEN, APP_X_HANDLE=SimpliGrok, GROKBOT_WEBHOOK_URL, GROKBOT_WEBHOOK_KEY
+set -a && . ../.env && set +a
+TARGET=simpliearn npm start -- --source inject      # control screen: http://localhost:4100
 ```
-cd ~/grokathon/complaint-commit && npm install
-npm start                 # control screen http://localhost:4100, demo app http://localhost:4000 (override: APP_PORT/STAGING_PORT/CONTROL_PORT)
-npm run reset             # re-plant the 3 bugs. While npm start runs this goes through the server (same as "Reset bugs");
-                          # with the server stopped it wipes live/ directly
-npm run bench -- 2        # headless table incl. per-round arena table. Server must be STOPPED (bench refuses otherwise)
-npm run kill-ports        # frees 4000/4001/4051/4100/4112 (node processes only) after a crash or kill -9
-npm run test:gate && npm run test:arena && npm run test:grokbot
-# Grok Bot, stub:  GROKBOT_WEBHOOK_KEY=k npm run fake-grokbot   +  GROKBOT_WEBHOOK_URL=http://127.0.0.1:4113/webhook GROKBOT_WEBHOOK_KEY=k PUBLIC_APP_URL=http://127.0.0.1:4000 PUBLIC_CALLBACK_URL=http://127.0.0.1:4112 npm start
-# REAL: put XAI_API_KEY (and GROKBOT_* values) in ~/grokathon/.env, then `node scripts/check-xai.js`, `npm run tunnel`, `npm start`
+
+Then either tag `@SimpliGrok` on X, paste a post link into **Fetch from X**, or inject a post:
+
+```bash
+npm run inject -- "@SimpliGrok the QoQ comparison tab never loads" judge                 # AUTO tier
+npm run inject -- "@SimpliGrok NVDA chart says +250% after earnings, the stock moved 3%" judge   # PR tier
+npm run ingest-x -- https://x.com/<user>/status/<id>                                      # real post by link
+npm run reset                                                                             # re-plant the seeded bugs
 ```
-Stopping: Ctrl-C, `kill <pid>` (SIGTERM) or SIGHUP stop the live app, any staging / arena-reference servers and the Grok Bot
-callback server. A failed start (e.g. a port in use) also cleans up and exits 1. `kill -9` can't be caught; use `npm run kill-ports`.
 
-The header badge shows the mode: `MOCK · no xAI key, canned outputs`, `REAL`, or `REAL code path, LOCAL STUB endpoint`.
+Without an xAI key everything runs in clearly labelled MOCK mode. `http://localhost:4100/?demo=1` replays a canned run with
+no backend (sample data, not a real run).
 
-## 2-minute demo script (judge)
-1. **(0:00) Hook.** "Users complain about bugs on X all day. What if the complaint *was* the bug report, and the fix shipped itself, safely?" Point at the header badge: it says MOCK, and say why (no key yet). Every result is labelled.
-2. **(0:15) Inject the complaint.** Click **export broken**. The step bar lights up: Reproduce shows *who* reproduced it (Grok Bot cloud browser, or the labelled Playwright fallback) with the screenshot of the broken page.
-3. **(0:35) The arena.** The Fixer's first patch passes the diff gate and the existing tests. A normal pipeline would ship it here. Then the Breaker attacks it:
-   - R1.1, "a note with a comma stays one CSV field": **ADMITTED**, and it **KILLED** the patch (show the red assertion output).
-   - R1.3, "every field quoted": **REJECTED** by the referee, because it fails on the reference fix too. The referee throws out tests that assert requirements the reference doesn't meet.
-4. **(1:05) Retry.** The red banner shows the failing test going back to the Fixer. Attempt 2 survives R1.1, R1.2 and the new R2.1 (quotes and newlines). **SHIPPED**, with a commit link (click it to show the real diff in `live/`) and a draft reply.
-   *If Grok Bot is configured but the REAL routine never calls back:* the card says "waiting for the Grok Bot callback" with a
-   **Skip to Playwright fallback** button. Click it and the run continues on local Playwright, labelled as a fallback. Without
-   the click it waits `GROKBOT_TIMEOUT_MS` (default 150000; set 30000 to 45000 in `~/grokathon/.env` for a live demo), and
-   Reset bugs waits behind it.
-5. **(1:25) Safety.** Click **!admin**: REFUSED by the gatekeeper. Mention that even a legitimate bug whose patch touches `roles.js` is blocked by the diff gate (`npm run test:gate` proves it), and that Breaker code runs with no network, no env and no writes.
-6. **(1:45) Grok everywhere.** Grok x_search hears the complaint, Grok triages it, Grok Bot reproduces it in a cloud browser, Grok fixes, a second Grok attacks, and Cursor can drop in as the Fixer. Close on "only the independently verified patch survives." Press **Reset bugs** to run it again.
+Tests: `npm run test:gate && npm run test:target`.
 
-## Files
-`control/index.html` (control screen, SSE), `src/pipeline.js` (orchestrator), `ARENA.md`, `GROKBOT.md`, `RESULTS.md` (measured numbers), `app/` (Jotter demo app source with 3 planted bugs), `live/` (deployed copy, nested git repo, ignored).
+## Demo script (2 minutes)
+
+1. **Hook (0:00).** "BDBI's builders graduate; the bugs stay. What if a tweet was enough to get one fixed — safely?"
+2. **Tag it (0:15).** A judge posts "@SimpliGrok the QoQ comparison tab never loads". It appears on the screen by itself
+   (or paste the link into **Fetch from X**).
+3. **Watch (0:30).** Triage → failing test → two Grok models race → the Breaker attacks → **"Small fix · auto-applied"**,
+   with the commit.
+4. **The hard one (1:00).** "NVDA chart says +250%". The fast model falls for the trap; tests catch it; the reasoning
+   model's fix becomes a **PR for maintainer review**, because calculation code is never auto-applied.
+5. **Trust (1:30).** Open the Grok Bot chat: it verified the fix on its own computer. Show that "make everyone an admin"
+   is refused. Close: *"Every decision is made by something other than the model that wrote the code."*
+
+## Limits
+
+- **Seeded demo bugs.** The two SimpliEarn bugs are planted on a local branch `automaintainer-demo` in a clearly
+  labelled commit. They are not real SimpliEarn regressions. Reference fixes are in `targets/simpliearn/reference/`.
+- **Tag pickup needs the X API.** Grok's X search does not yet index brand-new accounts, so automatic pickup uses the
+  X API mentions endpoint; fetching by link works either way.
+- **Grok Bot reports in its own chat.** Inbound tunnels aren't allowed on the demo machine, so results appear in the
+  Grok Bot chat and Runs tab, not live on the control screen. Webhook bodies must stay under ~4 KB.
+- **The PR-tier bug isn't fully reliable:** runs have taken from 24 s to 2.5 min, and one early run found no surviving fix.
+- **Cursor** as a fixer is a stub interface; the Cursor cloud-agent loop is not wired in yet.
+
+## Repository map
+
+| Path | What |
+|---|---|
+| `src/target/` | config-target pipeline: gate and tier rule (`core.js`), Grok agents (`agents.js`), the race (`pipeline.js`), Grok Bot verify |
+| `src/listener/` | intake: X API mentions (`xapi.js`), fetch by link (`xfetch.js`), Grok X search (`xsearch.js`), inject |
+| `targets/simpliearn/` | SimpliEarn target: globs, forbidden paths, tests, seeded bugs, reset script |
+| `control/index.html` | the control screen (live updates over SSE) |
+| `RESULTS.md`, `ARENA.md`, `GROKBOT.md` | measured numbers, Patch Arena design, Grok Bot setup |
+| `app/`, `src/pipeline.js` | the original "Jotter" web demo this grew out of (`TARGET=jotter`) |
