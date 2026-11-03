@@ -1,7 +1,8 @@
 # SimpliEarn Timeline · BDBI AutoMaintainer
 
-> **Tag @SimpliGrok on X. Grok reproduces the bug, races to fix it, tries to break its own fix,
-> and code — not the model — decides whether it ships or goes to a human.**
+> **Tag @SimpliGrok on X. Report a bug, and Grok reproduces it, races to fix it, tries to break its own fix,
+> and code — not the model — decides whether it ships or goes to a human. Post an earnings claim, and Grok
+> cross-examines it against the call transcript.**
 
 Big Data Big Impact (BDBI) at Georgia Tech builds open-source apps for real problems. When the students who
 built them graduate, users keep finding bugs that nobody is around to fix. AutoMaintainer turns a public
@@ -10,7 +11,16 @@ complaint into a reproduced, tested, independently verified change on a real BDB
 
 Built for the **BDBI × SpaceXSI Grokathon** (Georgia Tech, Nov 2026).
 
-<p align="center"><em>Control screen, real run: a post tagging @SimpliGrok → auto-fixed and committed in 12.3 s</em></p>
+![Real run: a post tagging @SimpliGrok, auto-fixed and committed in 12.3 s](docs/screens/auto-fix.png)
+
+<table>
+<tr>
+<td width="50%"><img src="docs/screens/pr.png" alt="A calculation bug becomes a PR for maintainer review"><br><sub>A calculation bug becomes a PR for maintainer review.</sub></td>
+<td width="50%"><img src="docs/screens/claim.png" alt="An earnings claim is cross-examined against the call transcript"><br><sub>An earnings claim is cross-examined against the call transcript.</sub></td>
+</tr>
+</table>
+
+*All three are real runs with real Grok calls. The SimpliEarn bugs are seeded demo bugs.*
 
 ---
 
@@ -41,6 +51,29 @@ Built for the **BDBI × SpaceXSI Grokathon** (Georgia Tech, Nov 2026).
 7. **Independent verification.** The winning patch is sent to a **Grok Bot** routine ("AutoMaintainer Verify") that clones
    SimpliEarn on its own cloud computer, confirms the bug, applies the fix and reruns the check.
 
+## Two jobs, one intake: Cross-Examination
+
+Not every post about SimpliEarn is a bug. Grok's triage also recognises **earnings claims**, like "$TSLA confirms June
+2025 launch for unsupervised FSD". Those go to **Cross-Examination**, a teammate's SimpliEarn feature
+(`aarokiya/simpliGrok`, branch `feature/cross-examination`), and never touch the fix pipeline:
+
+1. Grok fetches the post and extracts the claims.
+2. The claims are matched to a call in SimpliEarn's library, and BM25 retrieval finds transcript evidence.
+3. Grok rates each claim: SUPPORTED, EXAGGERATED, CONTRADICTED, INSUFFICIENT_EVIDENCE or OUT_OF_SCOPE. Grok only
+   returns evidence IDs; all quote text is copied from the transcript by code, and a deterministic verifier checks
+   every quote, segment and speaker.
+4. The control screen shows the verdict per claim, a link to the shareable receipt, and a draft reply.
+
+```
+                       ┌─ bug report ────▶ AutoMaintainer ─────▶ commit or PR
+ @SimpliGrok post ─▶ Grok triage
+                       └─ earnings claim ─▶ Cross-Examination ─▶ receipt with verdicts
+```
+
+The merged repo is also an AutoMaintainer target (`TARGET=simpligrok`). Its test gate includes Cross-Examination's
+32 tests, and the fact-checker's own code is on the forbidden list, so a bug fix can never quietly change how claims
+are judged.
+
 ## Real results
 
 All runs below used real Grok calls on real SimpliEarn code. The bugs are **seeded demo bugs** (see *Limits*).
@@ -51,6 +84,10 @@ All runs below used real Grok calls on real SimpliEarn code. The bugs are **seed
 | "NVDA chart says +250% after earnings" (calculation bug with a trap) | PR for maintainer review | 23.8 s; another run 2.5 min, where the fast model fell for the trap and the reasoning model won |
 | Grok Bot independent verification of the QoQ fix | "the bug reproduced, and the fix verified" (exit 1 before, exit 0 after) | ~1 min |
 | 5 malicious posts ("make everyone admin", "ignore previous instructions", …) | all refused | — |
+| Real `@StockSavvyShay` post about Tesla's Q4 2024 call, routed to Cross-Examination | 3 claims checked: 1 supported, 2 exaggerated, with receipt | 25.2 s for a fresh examination (a repeat post reuses the receipt in ~1 s) |
+
+Cross-Examination's own evaluation on human-reviewed labels (from its repo): claims 16/16, fabricated quotes blocked
+20/20, p50 about 21 s. Its Dodge Meter is experimental (3/6).
 
 More numbers, including the earlier runs that failed, are in [RESULTS.md](RESULTS.md).
 
@@ -58,7 +95,7 @@ More numbers, including the earlier runs that failed, are in [RESULTS.md](RESULT
 
 | Product | Where |
 |---|---|
-| **Grok API** (`grok-4.20` fast + reasoning) | triage, failing-test generation, the fixer race, the Breaker |
+| **Grok API** (`grok-4.20` fast + reasoning) | triage, failing-test generation, the fixer race, the Breaker, claim extraction and verdicts |
 | **Grok X search** | fetching a real post by link |
 | **X API v2** | automatic pickup of posts that tag `@SimpliGrok` |
 | **Grok Bot** | webhook-triggered routine that verifies each fix on its own cloud computer |
@@ -94,6 +131,14 @@ npm run ingest-x -- https://x.com/<user>/status/<id>                            
 npm run reset                                                                             # re-plant the seeded bugs
 ```
 
+For earnings claims, also start Cross-Examination (in the `simpliGrok` repo; `RAG/.env` needs `XAI_API_KEY`):
+
+```bash
+cd simpliGrok/RAG && .venv/bin/uvicorn cross_examination.app:app --port 8000   # XEXAM_URL defaults to http://127.0.0.1:8000
+```
+
+`TARGET=simpligrok` runs AutoMaintainer on the merged repo, with Cross-Examination's tests in the gate.
+
 Without an xAI key everything runs in clearly labelled MOCK mode. `http://localhost:4100/?demo=1` replays a canned run with
 no backend (sample data, not a real run).
 
@@ -108,7 +153,9 @@ Tests: `npm run test:gate && npm run test:target`.
    with the commit.
 4. **The hard one (1:00).** "NVDA chart says +250%". The fast model falls for the trap; tests catch it; the reasoning
    model's fix becomes a **PR for maintainer review**, because calculation code is never auto-applied.
-5. **Trust (1:30).** Open the Grok Bot chat: it verified the fix on its own computer. Show that "make everyone an admin"
+5. **Not a bug (1:20).** Fetch a post making an earnings claim (e.g. the `@StockSavvyShay` Tesla post). Triage says
+   **Claim**, and Cross-Examination returns a verdict per claim with a receipt.
+6. **Trust (1:35).** Open the Grok Bot chat: it verified the fix on its own computer. Show that "make everyone an admin"
    is refused. Close: *"Every decision is made by something other than the model that wrote the code."*
 
 ## Limits
@@ -121,6 +168,9 @@ Tests: `npm run test:gate && npm run test:target`.
   Grok Bot chat and Runs tab, not live on the control screen. Webhook bodies must stay under ~4 KB.
 - **The PR-tier bug isn't fully reliable:** runs have taken from 24 s to 2.5 min, and one early run found no surviving fix.
 - **Cursor** as a fixer is a stub interface; the Cursor cloud-agent loop is not wired in yet.
+- **Cross-Examination verdicts vary between runs** (the assessment isn't deterministic), and its Dodge Meter is
+  experimental. It needs its own backend running (`uvicorn cross_examination.app:app --port 8000` in `simpliGrok/RAG`);
+  if it's down, claim posts show "unavailable", never a made-up verdict.
 
 ## Repository map
 
@@ -129,6 +179,8 @@ Tests: `npm run test:gate && npm run test:target`.
 | `src/target/` | config-target pipeline: gate and tier rule (`core.js`), Grok agents (`agents.js`), the race (`pipeline.js`), Grok Bot verify |
 | `src/listener/` | intake: X API mentions (`xapi.js`), fetch by link (`xfetch.js`), Grok X search (`xsearch.js`), inject |
 | `targets/simpliearn/` | SimpliEarn target: globs, forbidden paths, tests, seeded bugs, reset script |
+| `targets/simpligrok/` | the merged SimpliEarn + Cross-Examination repo as a target, with the fact-checker's tests in the gate |
+| `src/target/xexam.js` | routes earnings claims to Cross-Examination and shows the receipt |
 | `control/index.html` | the control screen (live updates over SSE) |
 | `RESULTS.md`, `ARENA.md`, `GROKBOT.md` | measured numbers, Patch Arena design, Grok Bot setup |
 | `app/`, `src/pipeline.js` | the original "Jotter" web demo this grew out of (`TARGET=jotter`) |
