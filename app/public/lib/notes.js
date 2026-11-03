@@ -13,6 +13,7 @@ export function searchNotes(notes, query) {
   return notes.filter((n) => n.text.includes(query));
 }
 
-export function toMarkdown(notes) {
-  return ['# My notes', ...notes.map((n) => `- ${n.text}`)].join('\n') + '\n';
+// CSV export: one column ("text"), one row per note.
+export function toCSV(notes) {
+  return ['text', ...notes.map((n) => n.text)].join('\n') + '\n';
 }

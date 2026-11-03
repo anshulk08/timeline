@@ -19,7 +19,8 @@ export function parseDiff(diff) {
   return { files: [...files], added, removed, problems };
 }
 
-export function checkDiff(diff) {
+// opts.forbidLines: lines of Breaker test code. A patch that pastes them into app source is rejected (Patch Arena).
+export function checkDiff(diff, { forbidLines = [] } = {}) {
   const reasons = [];
   if (!diff || !/^@@/m.test(diff)) reasons.push('no hunks in diff');
   const { files, added, removed, problems } = parseDiff(diff || '');
@@ -34,6 +35,8 @@ export function checkDiff(diff) {
     const m = l.match(FORBIDDEN_CODE);
     if (m) reasons.push(`forbidden identifier "${m[0]}" in changed line: ${l.trim().slice(0, 80)}`);
   }
+  const banned = new Set(forbidLines.map((l) => l.trim()).filter((l) => l.length >= 16));
+  for (const l of added) if (banned.has(l.trim())) reasons.push(`Breaker test code copied into app source: ${l.trim().slice(0, 80)}`);
   const n = added.length + removed.length;
   if (n > MAX_CHANGED_LINES) reasons.push(`too many changed lines: ${n} > ${MAX_CHANGED_LINES}`);
   return { ok: reasons.length === 0, reasons: [...new Set(reasons)], files, changedLines: n };

@@ -1,0 +1,12 @@
+diff --git a/public/app.js b/public/app.js
+index a39b2fd..98d7537 100644
+--- a/public/app.js
++++ b/public/app.js
+@@ -26,6 +26,7 @@ function render() {
+ }
+ 
+ $('add-form').addEventListener('submit', (e) => {
++  e.preventDefault();
+   notes = addNote(notes, $('note-input').value);
+   $('note-input').value = '';
+   render();

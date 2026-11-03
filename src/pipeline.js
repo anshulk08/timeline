@@ -6,6 +6,8 @@ import { MODE } from './env.js';
 import { classify } from './gatekeeper.js';
 import { makePlan, runPlan } from './reproducer.js';
 import { getFixer } from './fixers/index.js';
+import { getBreaker } from './breaker/index.js';
+import { Arena } from './arena/index.js';
 import { gateAndTest, deploy, readAllowlisted, startLive, stopLive } from './shipper.js';
 import { runAppTests } from './tests.js';
 import { LIVE, APP_PORT, STAGING_PORT, RUNS, CONTROL_PORT } from './paths.js';
@@ -13,9 +15,12 @@ import { reset as resetApp } from '../scripts/reset.js';
 
 let seq = 0;
 export class Pipeline extends EventEmitter {
-  constructor({ fixer } = {}) {
+  // arena: false disables Patch Arena (also ARENA=0). breaker: name or {name, mode, attack}.
+  constructor({ fixer, breaker, arena } = {}) {
     super();
     this.fixer = fixer && typeof fixer === 'object' ? fixer : getFixer(fixer);
+    this.arenaOn = arena ?? process.env.ARENA !== '0';
+    this.breaker = this.arenaOn ? (breaker && typeof breaker === 'object' ? breaker : getBreaker(breaker)) : null;
     this.mode = MODE;
     this.records = [];
     this.issues = new Map();
@@ -35,7 +40,7 @@ export class Pipeline extends EventEmitter {
     if (reset) { resetApp(); this.issues.clear(); this.records = []; }
     if (!(await startLive())) throw new Error('live app failed to start');
     this.baseline = await runAppTests(LIVE, STAGING_PORT);
-    this.log(null, 'boot', `${this.mode} mode, fixer=${this.fixer.name}. live app on :${APP_PORT}. baseline tests: ${this.baseline.pass.length} pass / ${this.baseline.fail.length} fail [${this.baseline.fail.join(', ')}]`);
+    this.log(null, 'boot', `${this.mode} mode, fixer=${this.fixer.name}, arena=${this.breaker ? `${this.breaker.mode} breaker=${this.breaker.name}` : 'off'}. live app on :${APP_PORT}. baseline tests: ${this.baseline.pass.length} pass / ${this.baseline.fail.length} fail [${this.baseline.fail.join(', ')}]`);
     this.emit('reset');
   }
 
@@ -112,20 +117,41 @@ export class Pipeline extends EventEmitter {
       if (!repro.reproduced) { issue.status = rec.status = 'not-reproduced'; rec.reply = `@${rec.post.author} Thanks! We couldn't reproduce that. Mind sharing steps?`; return this.finish(rec); }
 
       rec.status = 'fixing';
-      let fix, gt, previousError;
-      for (let attempt = 1; attempt <= (this.fixer.name === 'mock' ? 1 : 2); attempt++) {
-        fix = await this.timed(rec, 'fix', () => this.fixer.fix({ issue, repro, files: readAllowlisted(), previousError }));
-        rec.diff = fix.diff;
+      const arena = this.breaker ? new Arena({ issue, breaker: this.breaker, emit: (e) => this.emit('arena', { t: Date.now(), postId: rec.id, mode: this.breaker.mode, ...e }), log: (st, m) => this.log(rec, st, m) }) : null;
+      let fix, gt, previousError, previousDiff, breakerFailures;
+      const MAX_ATTEMPTS = 2; // total Fixer attempts, including Patch Arena retries
+      for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+        fix = await this.timed(rec, 'fix', () => this.fixer.fix({ issue, repro, files: readAllowlisted(), previousError, previousDiff, breakerFailures, attempt }));
+        rec.diff = fix.diff; rec.attempts = attempt;
         this.log(rec, 'fix', `patch from ${fix.source} (attempt ${attempt}, ${fix.diff.split('\n').length} lines)`);
         rec.status = 'testing';
-        gt = await this.timed(rec, 'gate_test', () => gateAndTest(fix.diff, { baseline: this.baseline, plan, log: (s, m) => this.log(rec, s, m) }));
-        if (gt.ok || gt.stage !== 'apply') break;
-        previousError = gt.reasons.join('; ');
+        gt = await this.timed(rec, 'gate_test', () => gateAndTest(fix.diff, { baseline: this.baseline, plan, log: (s, m) => this.log(rec, s, m), forbidLines: arena?.forbidLines() }));
+        if (!gt.ok) {
+          if (gt.stage === 'apply' && attempt < MAX_ATTEMPTS) { previousError = gt.reasons.join('; '); breakerFailures = null; continue; }
+          break;
+        }
+        if (!arena) break;
+        rec.status = 'arena';
+        const r = await this.timed(rec, 'arena', () => arena.round({ round: attempt, diff: fix.diff, source: fix.source }));
+        r.fixMs = rec.stages.fix.ms; r.gateTestMs = rec.stages.gate_test.ms;
+        rec.arena = arena.summary(); this.update(rec);
+        if (!r.killed.length) break;
+        if (attempt === MAX_ATTEMPTS) { gt = { ...gt, ok: false, stage: 'arena', reasons: [`patch killed by Breaker test(s): ${r.killed.map((k) => `${k.id} "${k.name}"`).join(', ')}`] }; break; }
+        breakerFailures = r.killed; previousDiff = fix.diff; previousError = null;
+        this.emit('arena', { t: Date.now(), postId: rec.id, mode: this.breaker.mode, type: 'retry', round: attempt, nextAttempt: attempt + 1, failing: r.killed.map((k) => ({ id: k.id, name: k.name, output: k.output })) });
+        this.log(rec, 'arena', `patch KILLED by ${r.killed.length} admitted Breaker test(s); sending failing tests back to the Fixer (attempt ${attempt + 1}/${MAX_ATTEMPTS})`);
+      }
+      if (arena) {
+        rec.arena = arena.summary();
+        const last = arena.rounds.at(-1);
+        const result = gt.ok ? 'ship' : gt.stage === 'arena' ? 'killed' : arena.rounds.length ? `not-shipped (${gt.stage})` : 'not-run';
+        rec.arena.verdict = result;
+        this.emit('arena', { t: Date.now(), postId: rec.id, mode: this.breaker.mode, type: 'verdict', result, rounds: arena.rounds.length, attempts: rec.attempts, admitted: arena.admitted.length, rejected: arena.rejected.length, killedBy: last?.killed?.map((k) => k.id) || [], reason: gt.ok ? 'original tests + all admitted Breaker tests pass' : gt.reasons.join('; ') });
       }
       rec.gate = { ok: gt.ok, stage: gt.stage, reasons: gt.reasons };
       if (!gt.ok) {
-        issue.status = rec.status = gt.stage === 'gate' || gt.stage === 'tree' ? 'blocked' : 'failed';
-        rec.stages.gate_test.status = 'fail';
+        issue.status = rec.status = gt.stage === 'gate' || gt.stage === 'tree' ? 'blocked' : gt.stage === 'arena' ? 'killed' : 'failed';
+        rec.stages[gt.stage === 'arena' ? 'arena' : 'gate_test'].status = 'fail';
         this.log(rec, 'ship', `NOT deployed: ${gt.reasons.join('; ')}`);
         return this.finish(rec);
       }

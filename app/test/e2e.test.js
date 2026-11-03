@@ -19,7 +19,7 @@ test('adding a note keeps it on the page', async () => {
   await page.close();
 });
 
-test('export button downloads notes as markdown', async () => {
+test('export button downloads notes as CSV', async () => {
   const page = await browser.newPage();
   await page.goto(URL + '/?seed=alpha,beta');
   const [dl] = await Promise.all([
@@ -29,6 +29,6 @@ test('export button downloads notes as markdown', async () => {
   const path = await dl.path();
   const { readFile } = await import('node:fs/promises');
   const text = await readFile(path, 'utf8');
-  assert.equal(text, '# My notes\n- alpha\n- beta\n');
+  assert.equal(text, 'text\nalpha\nbeta\n');
   await page.close();
 });

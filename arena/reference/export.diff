@@ -1,0 +1,28 @@
+diff --git a/public/app.js b/public/app.js
+index a39b2fd..513ac5e 100644
+--- a/public/app.js
++++ b/public/app.js
+@@ -34,7 +34,7 @@ $('add-form').addEventListener('submit', (e) => {
+ $('search').addEventListener('input', (e) => { query = e.target.value; render(); });
+ 
+ function exportNotes() {
+-  const blob = new Blob(toCSV(notes), { type: 'text/csv' });
++  const blob = new Blob([toCSV(notes)], { type: 'text/csv' });
+   const a = document.createElement('a');
+   a.href = URL.createObjectURL(blob);
+   a.download = 'notes.csv';
+diff --git a/public/lib/notes.js b/public/lib/notes.js
+index 2ccb3dc..3c490be 100644
+--- a/public/lib/notes.js
++++ b/public/lib/notes.js
+@@ -13,7 +13,9 @@ export function searchNotes(notes, query) {
+   return notes.filter((n) => n.text.includes(query));
+ }
+ 
++const csvCell = (s) => (/[",\r\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
++
+ // CSV export: one column ("text"), one row per note.
+ export function toCSV(notes) {
+-  return ['text', ...notes.map((n) => n.text)].join('\n') + '\n';
++  return ['text', ...notes.map((n) => csvCell(n.text))].join('\n') + '\n';
+ }

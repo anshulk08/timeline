@@ -4,3 +4,5 @@ live/
 runs/
 .env
 *.log
+.arena-ref/
+.arena-ref.patch

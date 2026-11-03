@@ -1,4 +1,4 @@
-import { addNote, deleteNote, searchNotes, toMarkdown } from './lib/notes.js';
+import { addNote, deleteNote, searchNotes, toCSV } from './lib/notes.js';
 
 const $ = (id) => document.getElementById(id);
 const seed = new URLSearchParams(location.search).get('seed');
@@ -34,10 +34,10 @@ $('add-form').addEventListener('submit', (e) => {
 $('search').addEventListener('input', (e) => { query = e.target.value; render(); });
 
 function exportNotes() {
-  const blob = new Blob(toMarkdown(notes), { type: 'text/markdown' });
+  const blob = new Blob(toCSV(notes), { type: 'text/csv' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'notes.md';
+  a.download = 'notes.csv';
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }

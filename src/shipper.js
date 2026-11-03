@@ -43,8 +43,8 @@ export async function applyDiff(diff) {
 }
 
 // Gate + test stage. Returns {ok, gate, apply, treeViolations, tests, stagingRepro, reasons}
-export async function gateAndTest(diff, { baseline, plan, log }) {
-  const gate = checkDiff(diff);
+export async function gateAndTest(diff, { baseline, plan, log, forbidLines }) {
+  const gate = checkDiff(diff, { forbidLines });
   log?.('gate', gate.ok ? `diff gate PASS (${gate.files.join(', ')}, ${gate.changedLines} lines)` : `diff gate BLOCK: ${gate.reasons.join('; ')}`);
   if (!gate.ok) return { ok: false, stage: 'gate', gate, reasons: gate.reasons };
   prepareStaging();

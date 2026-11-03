@@ -1,0 +1,13 @@
+diff --git a/public/lib/notes.js b/public/lib/notes.js
+index 2ccb3dc..209d773 100644
+--- a/public/lib/notes.js
++++ b/public/lib/notes.js
+@@ -10,7 +10,7 @@ export function deleteNote(notes, id) {
+ 
+ export function searchNotes(notes, query) {
+   if (!query) return notes;
+-  return notes.filter((n) => n.text.includes(query));
++  return notes.filter((n) => n.text.toLowerCase().includes(query.toLowerCase()));
+ }
+ 
+ // CSV export: one column ("text"), one row per note.

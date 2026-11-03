@@ -16,6 +16,7 @@ const slim = (r) => ({ ...r, plan: r.plan });
 pipeline.on('update', (r) => send('update', slim(r)));
 pipeline.on('log', (e) => send('log', e));
 pipeline.on('reset', () => send('reset', {}));
+pipeline.on('arena', (e) => send('arena', e)); // Patch Arena events, schema in ARENA.md
 
 const listeners = [];
 const inject = createListener('inject', (p) => pipeline.handlePost(p));
