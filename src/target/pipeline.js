@@ -7,6 +7,7 @@ import path from 'node:path';
 import { MODE, MODE_LABEL, CANDIDATE_MODELS, BREAKER_MODEL } from '../env.js';
 import { RUNS } from '../paths.js';
 import * as A from './agents.js';
+const FIX_ATTEMPTS = Math.max(1, Number(process.env.FIX_ATTEMPTS || 2)); // per candidate; attempt 2 gets attempt 1's diff + failure output (REAL only)
 import {
   loadTarget, resolveRef, checkTargetDiff, decideTier, git, gitOk, addWorktree, removeWorktree, applyPatch, commitAll,
   advanceBranch, runSuite, runTestFile, writeFileIn, readContext, validTestPath,
@@ -156,22 +157,26 @@ export class TargetPipeline extends EventEmitter {
     try {
       dir = c.dir = await addWorktree(cfg.repo, base, `c${k}`);
       const context = readContext(dir, cfg);
-      const fx = await this.agents.fix({ model, issue, cfg, context, repro, signal: race.abort.signal });
+      let previous = null;
+      for (let attempt = 1; attempt <= FIX_ATTEMPTS; attempt++) {
+      if (attempt > 1) { await git(dir, ['checkout', '--', '.']); await git(dir, ['clean', '-fdq']); emit('running', { attempt }); }
+      const fail = (status, reason, out = '') => { if (attempt < FIX_ATTEMPTS && MODE === 'REAL' && !lost()) { previous = { diff: c.fix?.diff || '', why: `${reason}\n${out}` }; this.log(rec, 'candidate', `#${k} ${model} attempt ${attempt} ${status}: ${reason.slice(0, 160)}; retrying with feedback`); return null; } return emit(status, { reason, attempt }), c; };
+      const fx = await this.agents.fix({ model, issue, cfg, context, repro, signal: race.abort.signal, previous });
       if (lost()) return emit('lost'), c;
       c.fix = fx;
       const forbidLines = repro?.content ? lines(repro.content) : [];
       const g = checkTargetDiff(fx.diff, cfg, { forbidLines, protect: repro?.path ? [repro.path] : [] });
       c.lines = g.changedLines; c.files = g.files; c.gate = g;
-      if (!g.ok) return emit('gate-fail', { reason: g.reasons.join('; ').slice(0, 300) }), c;
+      if (!g.ok) { if (fail('gate-fail', g.reasons.join('; ').slice(0, 300))) return c; continue; }
       const ap = await applyPatch(dir, fx.diff);
-      if (!ap.ok) { c.gate = { ...g, ok: false, applyError: true, reasons: [`does not apply: ${ap.error}`] }; return emit('gate-fail', { reason: `does not apply: ${ap.error.slice(0, 200)}` }), c; }
+      if (!ap.ok) { c.gate = { ...g, ok: false, applyError: true, reasons: [`does not apply: ${ap.error}`] }; if (fail('gate-fail', `does not apply: ${ap.error.slice(0, 200)}`)) return c; continue; }
       // after-apply on-disk recheck: what really changed, not the proposed text
       const tree = (await git(dir, ['diff'])).out;
       const names = (await git(dir, ['diff', '--name-only'])).out.trim().split('\n').filter(Boolean);
       const untracked = (await git(dir, ['ls-files', '--others', '--exclude-standard'])).out.trim();
       const tg = checkTargetDiff(tree, cfg, { forbidLines, protect: repro?.path ? [repro.path] : [] });
       if (untracked) tg.reasons.push(`patch created untracked files: ${untracked.slice(0, 120)}`);
-      if (!tg.ok || untracked) { c.gate = { ...tg, ok: false }; return emit('gate-fail', { reason: `on-disk recheck: ${tg.reasons.join('; ').slice(0, 300)}` }), c; }
+      if (!tg.ok || untracked) { c.gate = { ...tg, ok: false }; if (fail('gate-fail', `on-disk recheck: ${tg.reasons.join('; ').slice(0, 300)}`)) return c; continue; }
       c.files = names; c.lines = tg.changedLines; c.gate = tg; c.treeDiff = tree;
       if (lost()) return emit('lost'), c;
       // tests: every suite that passed at baseline + the repro test
@@ -181,7 +186,7 @@ export class TargetPipeline extends EventEmitter {
       const basePass = new Set(this.baseline.results.filter((r) => r.ok).map((r) => r.name));
       const broke = suite.results.filter((r) => basePass.has(r.name) && !r.ok).map((r) => r.name);
       c.tests = { suite: suite.results.map(({ name, ok, ms }) => ({ name, ok, ms })), repro: rt ? { ok: rt.ok, ms: rt.ms, out: rt.ok ? '' : rt.out.slice(-600) } : null };
-      if (broke.length || (rt && !rt.ok)) return emit('tests-fail', { reason: [broke.length ? `broke: ${broke.join(', ')}` : '', rt && !rt.ok ? 'repro test still fails' : ''].filter(Boolean).join('; ') }), c;
+      if (broke.length || (rt && !rt.ok)) { const why = [broke.length ? `broke: ${broke.join(', ')}` : '', rt && !rt.ok ? 'repro test still fails' : ''].filter(Boolean).join('; '); const outs = [rt && !rt.ok ? rt.out.slice(-900) : '', ...suite.results.filter((r) => broke.includes(r.name)).map((r) => r.out.slice(-500))].join('\n'); if (fail('tests-fail', why, outs)) return c; continue; }
       if (lost()) return emit('lost'), c;
       // Patch Arena (Breaker + referee against hidden reference fix)
       const ar = await this.arena(c, ctx, dir, tree);
@@ -191,6 +196,8 @@ export class TargetPipeline extends EventEmitter {
       emit('pass');
       race.winner = c; race.abort.abort(); race.resolve(c);
       emit('winner');
+      return c;
+      }
       return c;
     } catch (e) {
       if (lost() || race.abort.signal.aborted) return emit('lost'), c;

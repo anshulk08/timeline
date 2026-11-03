@@ -97,6 +97,11 @@ http.createServer(async (req, res) => {
     return res.end(out);
   }
   if (u.pathname === '/changes') { res.setHeader('content-type', 'text/plain'); return res.end(await liveLog()); }
+  if (/^\/runs\/pr\/[A-Za-z0-9._-]+\.md$/.test(u.pathname)) { // PR-tier bodies written by TargetPipeline
+    const f = path.join(RUNS, 'pr', path.basename(u.pathname));
+    if (!fs.existsSync(f)) { res.statusCode = 404; return res.end('no such PR body'); }
+    res.setHeader('content-type', 'text/plain; charset=utf-8'); return fs.createReadStream(f).pipe(res);
+  }
   if (u.pathname.startsWith('/runs/')) {
     const f = path.join(RUNS, path.basename(u.pathname));
     if (!/\.(png|jpg)$/.test(f) || !fs.existsSync(f)) { res.statusCode = 404; return res.end(); }

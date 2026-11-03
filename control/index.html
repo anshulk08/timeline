@@ -414,7 +414,8 @@ const am = new Map(); // id -> { repro, cands:{n,models}, lanes: Map(k -> ev), t
 function amOf(id) { if (!am.has(id)) am.set(id, { lanes: new Map() }); return am.get(id); }
 function onAm(type, e) {
   if (!e || e.id == null) return;
-  const x = amOf(String(e.id));
+  const x = amOf(String(e.postId ?? e.id)); // live events carry postId (record id) + id (issue signature)
+  if (e.postId != null) x.sig = String(e.id);
   if (type === 'repro_test') x.repro = e;
   else if (type === 'candidates') x.cands = e;
   else if (type === 'candidate') { const k = e.k ?? x.lanes.size; x.lanes.set(k, { ...(x.lanes.get(k) || {}), ...e }); }
@@ -482,13 +483,13 @@ function strip(id) {
   if (x.auto) s7 = `<div class="stg ok out-auto"><div class="sl"><span>Auto-deploy</span><span>${x.auto.ms != null ? sec(x.auto.ms) : ''}</span></div><div class="sv">Deployed &#10003;</div><div class="sd"><span class="sha">${esc(String(x.auto.sha || '').slice(0, 7))}</span><br>on <b>${esc(x.auto.branch || '')}</b></div></div>`;
   else if (x.pr) {
     const files = x.pr.files || [];
-    s7 = `<div class="stg warn prc"><div class="sl"><span>PR ready</span><span>${x.pr.ms != null ? sec(x.pr.ms) : ''}</span></div><div class="sv" style="font-size:16px">PR ready for maintainer review</div><div class="ttl">${esc(x.pr.title || '')}</div><div class="sd"><b>${esc(x.pr.branch || '')}</b> &rarr; ${esc(x.pr.base || '')}</div><div class="files" title="${esc(files.join(', '))}">${files.length} file${files.length === 1 ? '' : 's'}: ${esc(files.join(', '))}</div><div class="sd"><a href="/runs/pr/${encodeURIComponent(id)}.md" data-pr="${esc(id)}">view PR body</a></div></div>`;
+    s7 = `<div class="stg warn prc"><div class="sl"><span>PR ready</span><span>${x.pr.ms != null ? sec(x.pr.ms) : ''}</span></div><div class="sv" style="font-size:16px">PR ready for maintainer review</div><div class="ttl">${esc(x.pr.title || '')}</div><div class="sd"><b>${esc(x.pr.branch || '')}</b> &rarr; ${esc(x.pr.base || '')}</div><div class="files" title="${esc(files.join(', '))}">${files.length} file${files.length === 1 ? '' : 's'}: ${esc(files.join(', '))}</div><div class="sd"><a href="/runs/pr/${encodeURIComponent(x.pr.id ?? id)}.md" data-pr="${esc(id)}">view PR body</a></div></div>`;
   } else if (x.tier?.tier === 'blocked') s7 = stg('bad', 'Outcome', 'Blocked', 'forbidden file / identifier, nothing applied');
   else if (r?.status === 'shipped') s7 = stg('ok', 'Outcome', 'Shipped &#10003;', `<span class="sha">${esc(r.sha || '')}</span>`);
   else if (r && ['refused', 'blocked', 'failed', 'killed', 'error', 'rolled-back'].includes(r.status)) s7 = stg('bad', 'Outcome', esc(r.status.toUpperCase()), esc((r.gate?.reasons || []).join('; ') || r.error || ''));
   else s7 = stg('idle', 'Outcome', '&ndash;', 'auto-deploy or PR for review');
   const tot = r?.doneAt ? sec(r.totalMs) : '';
-  return `<div class="strip${id === focusId ? ' sel' : ''}" data-id="${esc(id)}"><div class="strip-h"><span class="iid">${esc(id)}</span><span>${esc(r?.status || 'running')}</span><span class="tot">${tot}</span></div><div class="stages">${s1}${s2}${s3}${s4}${s5}${s6}${s7}</div></div>`;
+  return `<div class="strip${id === focusId ? ' sel' : ''}" data-id="${esc(id)}"><div class="strip-h"><span class="iid">${esc(x.sig ? `${id} · ${x.sig}` : id)}</span><span>${esc(r?.status || 'running')}</span><span class="tot">${tot}</span></div><div class="stages">${s1}${s2}${s3}${s4}${s5}${s6}${s7}</div></div>`;
 }
 function renderAm() {
   if (!document.body.classList.contains('am')) return;
@@ -574,6 +575,7 @@ H.hello = (h) => {
   recs.clear(); arena.clear(); am.clear();
   for (const e of h.arena || []) onArena(e);
   for (const r of h.records || []) { recs.set(r.id, r); arenaFromRecord(r); }
+  for (const e of h.target?.events || []) if (AM_EVENTS.includes(e.type)) onAm(e.type, e);
   setTarget(h);
   render();
 };

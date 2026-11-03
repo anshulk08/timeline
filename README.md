@@ -1,4 +1,42 @@
-# Complaint → Commit
+# BDBI AutoMaintainer (built on Complaint → Commit)
+
+**BDBI builds software for real problems; when its builders graduate, users still find bugs.** Anyone can report a problem
+with a BDBI project on X; Grok triages it, writes a failing test that reproduces it, races Grok sub-agents to fix it, a Grok
+Breaker attacks the fix, and code — not the model — decides: small safe fixes auto-apply, bigger ones become a PR for maintainers.
+
+The BDBI project wired in is **SimpliEarn** (earnings-call dashboard: Next.js frontend, FastAPI RAG + sentiment), as the
+config target `targets/simpliearn/target.json`. Pipeline: `src/target/` (core = globs, gate, tier rule, worktrees;
+agents = Grok classify / repro test / Fixer / Breaker; pipeline = the race).
+
+```
+X post ─▶ Grok classify ─▶ Grok writes repro test ─▶ 2 Grok Fixers race ─▶ gate + on-disk recheck ─▶ tests + repro ─▶ Grok Breaker + referee ─▶ TIER (code)
+                           (must FAIL on current      (fast model vs          (paths, forbid globs,                                                     AUTO: local commit on automaintainer-demo
+                            code, else retried)        grok-4.7, own worktree) forbidden identifiers)                                                 PR:   local branch + runs/pr/<id>.md
+```
+Tier rule (`src/target/core.js`): AUTO only if every changed file matches `tiers.auto.globs`, changed lines ≤ `max_changed_lines`
+and nothing forbidden is hit; anything else that passes is PR; a forbidden hit is BLOCKED.
+
+### Demo in 3 commands
+```
+cd ~/grokathon/complaint-commit && set -a && . ../.env && set +a       # XAI_API_KEY (omit for MOCK)
+TARGET=simpliearn npm start -- --source inject                          # control screen http://localhost:4100 (resets the demo branch)
+npm run inject -- "@SimpliEarn the QoQ comparison tab never loads for me, just spins and then errors out" judge   # AUTO bug
+npm run inject -- "@SimpliEarn NVDA chart says +250% after earnings, that's obviously wrong lol. the stock moved like 3%" judge   # PR bug
+```
+`npm run reset` (or the Reset bugs button) runs `targets/simpliearn/reset.sh` between runs. `http://localhost:4100/?demo=1` replays a
+canned run with no backend. One-shot CLI: `TARGET=simpliearn npm run target-run`. Real numbers: RESULTS.md.
+
+### Honest limits
+- The two SimpliEarn bugs are **seeded demo bugs**, planted on a local branch `automaintainer-demo` (commit `aebe2d0`, labelled
+  as such); they are not real SimpliEarn regressions. Reference fixes live in `targets/simpliearn/reference/`.
+- Nothing is ever pushed: AUTO is a local fast-forward commit, PR is a local branch plus a Markdown body. No GitHub PR, no X post.
+- Inject stands in for X in the demo (x_search listener exists, see below). **Grok Bot** (cloud-browser reproduction) is only
+  wired in the Jotter web demo (`TARGET=jotter`, the default); SimpliEarn reproduction is a Grok-written failing test.
+- Cursor: `FIXER=cursor` is a stub interface, not wired.
+
+---
+
+## The original Jotter demo (TARGET=jotter, default)
 
 **A user finds a bug. Grok fixes it. Another Grok tries to prove the fix is wrong. Only the independently verified patch survives.**
 
@@ -8,9 +46,9 @@ Fixer writes a patch. A second Grok, the **Breaker**, then writes tests meant to
 only the attacks that are valid, a valid attack that fails sends the patch back to the Fixer, and only a patch that survives
 gets deployed. A reply is drafted to the user.
 
-> **Status, honestly:** no xAI key existed when this was built. Everything you can run today is **MOCK** (canned Fixer
-> diffs and Breaker tests) or uses a **LOCAL STUB** of Grok Bot. The REAL path for each part is wired behind env vars and
-> has been exercised only against local scripted stubs. The UI labels every result MOCK / LOCAL STUB / REAL. See RESULTS.md.
+> **Status, honestly:** the Jotter demo was built before an xAI key existed, so its numbers in RESULTS.md are **MOCK** /
+> **LOCAL STUB**. A real key now exists and the SimpliEarn target has been run against real Grok (RESULTS.md, "BDBI
+> AutoMaintainer"). Grok Bot itself is still only a labelled local stub. The UI labels every result MOCK / LOCAL STUB / REAL.
 
 ## Architecture
 ```
