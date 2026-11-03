@@ -41,6 +41,8 @@ export async function crossExamine(post, { intervalMs = 2000, timeoutMs = 120000
       await sleep(intervalMs);
       ex = await j(`${base}/api/examinations/${encodeURIComponent(examId)}`);
     }
+    // POST answers {id,status} only; a cached exam is already terminal, so always fetch the full body
+    if (!Array.isArray(ex.claims)) ex = await j(`${base}/api/examinations/${encodeURIComponent(examId)}`);
     return { examId, status: ex.status, ms: Date.now() - t0, ...mapExam(ex), receiptUrl: `${xexamWeb()}/receipt/${examId}` };
   } catch (e) {
     return { examId, status: 'unavailable', ms: Date.now() - t0, claims: [], error: `${e.cause?.code || ''} ${e.message}`.trim(), receiptUrl: examId ? `${xexamWeb()}/receipt/${examId}` : null };
