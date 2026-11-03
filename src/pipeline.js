@@ -193,7 +193,7 @@ export class Pipeline extends EventEmitter {
       if (arena) {
         rec.arena = arena.summary();
         const last = arena.rounds.at(-1);
-        const result = gt.ok ? 'ship' : gt.stage === 'arena' ? 'killed' : arena.rounds.length ? `not-shipped (${gt.stage})` : 'not-run';
+        const result = gt.ok ? (arena.rounds.length && arena.rounds.every((x) => x.skipped) ? 'skipped (timeout)' : 'ship') : gt.stage === 'arena' ? 'killed' : arena.rounds.length ? `not-shipped (${gt.stage})` : 'not-run';
         rec.arena.verdict = result;
         this.emit('arena', { t: Date.now(), postId: rec.id, mode: this.breaker.mode, type: 'verdict', result, rounds: arena.rounds.length, attempts: rec.attempts, admitted: arena.admitted.length, rejected: arena.rejected.length, killedBy: last?.killed?.map((k) => k.id) || [], reason: gt.ok ? 'original tests + all admitted Breaker tests pass' : gt.reasons.join('; ') });
       }

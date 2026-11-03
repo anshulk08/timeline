@@ -50,7 +50,12 @@ export class Arena {
     let out;
     const t0 = Date.now();
     try { out = await this.breaker.attack({ issue: this.issue, diff, files: readAllowlisted(STAGING), round, prior: this.admitted }); }
-    catch (e) { r.breakerError = e.message; this.log('arena', `Breaker call failed: ${e.message}`); out = { tests: [], source: `${this.breaker.mode} Breaker (error)` }; }
+    catch (e) {
+      r.breakerError = e.message;
+      if (/timeout|aborted/i.test(`${e.name} ${e.message}`)) { r.skipped = 'timeout'; this.emit({ type: 'skipped', round, reason: `Breaker timed out (${e.message})` }); }
+      this.log('arena', r.skipped ? `round ${round}: SKIPPED (timeout): Breaker gave no attacks in time: ${e.message}` : `Breaker call failed: ${e.message}`);
+      out = { tests: [], source: `${this.breaker.mode} Breaker (${r.skipped ? 'timeout' : 'error'})` };
+    }
     r.breakerMs = Date.now() - t0; r.breakerSource = out.source;
     const tests = (out.tests || []).slice(0, MAX_ATTACKS_PER_ROUND).map((t, i) => ({ ...t, id: `R${round}.${i + 1}`, round }));
     this.log('arena', `round ${round}: Breaker (${out.source}) proposed ${tests.length} attack(s) in ${(r.breakerMs / 1000).toFixed(2)}s`);

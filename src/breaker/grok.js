@@ -1,7 +1,7 @@
 // REAL Breaker: one Grok call per arena round writes up to 3 adversarial tests aimed at the proposed patch.
 // It never sees the hidden reference fix. Output format is strict JSON; parsing tolerates code fences.
 import { chat, parseJSON } from '../llm.js';
-import { MODEL, MODE_LABEL } from '../env.js';
+import { BREAKER_MODEL, BREAKER_TIMEOUT_MS, BREAKER_MAX_TOKENS, MODE_LABEL } from '../env.js';
 export const name = 'grok';
 const SYS = `You are the Breaker. A Fixer agent just patched a bug in a small notes web app (Jotter). The patch passes the existing tests.
 Your job: write up to 3 adversarial tests that a CORRECT, COMPLETE fix of this bug must pass but that this patch might FAIL
@@ -28,9 +28,11 @@ export function parseTests(content) {
 
 export async function attack({ issue, diff, files, round, prior = [] }) {
   const t0 = Date.now();
-  const listing = Object.entries(files).map(([p, c]) => `=== ${p} (after the patch) ===\n${c}`).join('\n\n');
+  // Small prompt (fix for REAL-run 90 s timeouts): the diff plus only the files the diff touches.
+  const touched = new Set([...String(diff).matchAll(/^\+\+\+ b\/(\S+)/gm)].map((m) => m[1]));
+  const listing = Object.entries(files).filter(([p]) => touched.has(p) || p === 'public/lib/notes.js').map(([p, c]) => `=== ${p} (after the patch) ===\n${c}`).join('\n\n');
   const user = `Bug report from a user: ${issue.text}\nTriage summary: ${issue.summary}\nArena round ${round}.\n\nProposed patch:\n${diff}\n\n${listing}` +
     (prior.length ? `\n\nAlready-admitted tests (do not repeat): ${JSON.stringify(prior.map((t) => t.name))}` : '');
-  const content = await chat([{ role: 'system', content: SYS }, { role: 'user', content: user }], { model: MODEL, json: true });
-  return { tests: parseTests(content), source: `grok Breaker (${MODEL}) [${MODE_LABEL}]`, ms: Date.now() - t0 };
+  const content = await chat([{ role: 'system', content: SYS }, { role: 'user', content: user }], { model: BREAKER_MODEL, json: true, timeoutMs: BREAKER_TIMEOUT_MS, maxTokens: BREAKER_MAX_TOKENS });
+  return { tests: parseTests(content), source: `grok Breaker (${BREAKER_MODEL}) [${MODE_LABEL}]`, ms: Date.now() - t0 };
 }
