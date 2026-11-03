@@ -87,6 +87,16 @@ export class Pipeline extends EventEmitter {
     this.emit('reset');
   }
 
+  // Reset serialized through the job queue: it waits for the running fix job, and posts that arrive meanwhile wait for
+  // it (handlePost), so a fix job never races init() for the staging port and never dedupes against pre-reset issues.
+  reset() {
+    if (this.resetting) return this.resetting;
+    const r = this.queue.then(() => this.init({ reset: true }));
+    this.resetting = r.finally(() => { this.resetting = null; });
+    this.queue = this.resetting.catch(() => {});
+    return this.resetting;
+  }
+
   async timed(rec, name, fn) {
     const t0 = Date.now();
     rec.stages[name] = { status: 'running', start: t0 };
@@ -104,6 +114,7 @@ export class Pipeline extends EventEmitter {
 
   // post: {text, author, createdAt(ms), source, url?, externalId?}
   async handlePost(post) {
+    if (this.resetting) await this.resetting.catch(() => {});
     const receivedAt = Date.now();
     const rec = { id: `p${++seq}`, post, mode: this.mode, receivedAt, stages: {}, status: 'received' };
     rec.stages.detect = { status: 'ok', ms: Math.max(0, receivedAt - (post.createdAt || receivedAt)), note: post.source === 'inject' ? 'inject (no X latency)' : 'X search' };

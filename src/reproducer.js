@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium } from 'playwright';
-import { MODE, FAST_MODEL } from './env.js';
+import { MODE, FAST_MODEL, MODE_LABEL } from './env.js';
 import { chat, parseJSON } from './llm.js';
 
 let browserP;
@@ -29,7 +29,7 @@ Steps (use CSS selectors from the HTML): {"op":"goto","path":"/"} | {"op":"fill"
 {"op":"expectCount","selector","count"} (expect N matching elements) | {"op":"expectText","selector","text"} (element contains text) | {"op":"expectDownload","selector"} (clicking selector should start a download).
 Expectations describe CORRECT behaviour; the bug is reproduced if an expectation fails. The app accepts "/?seed=a,b" to preload notes "a" and "b". Max 8 steps.`;
   const out = parseJSON(await chat([{ role: 'system', content: sys }, { role: 'user', content: `Bug report: ${issue.text}\nTriage summary: ${issue.summary}\n\nPage HTML:\n${html}` }], { json: true, model: FAST_MODEL }));
-  return { plan: out.plan, source: 'REAL grok-generated plan' };
+  return { plan: out.plan, source: `grok-generated plan [${MODE_LABEL}]` };
 }
 
 // Executes plan against baseUrl. Returns {reproduced, failures, screenshot, consoleErrors, ms}.

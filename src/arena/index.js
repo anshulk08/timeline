@@ -10,6 +10,8 @@ import { readAllowlisted } from '../shipper.js';
 import { lintTest, runBreakerTest } from './sandbox.js';
 
 export const MAX_ATTACKS_PER_ROUND = 3;
+// A test is admitted only if it passes on the reference EVERY time, so flaky tests (Math.random, timing) are rejected.
+export const REFEREE_RUNS = Math.max(1, Number(process.env.REFEREE_RUNS) || 3);
 
 export class Arena {
   constructor({ issue, breaker, emit = () => {}, log = () => {} }) {
@@ -63,9 +65,13 @@ export class Arena {
         if (lint) { verdict = 'rejected'; reason = `invalid test format: ${lint}`; }
         else if (!ref.ok) { verdict = 'rejected'; reason = `cannot referee: ${ref.reason}`; }
         else {
-          refRun = await runBreakerTest(t, { dir: ARENA_REF, url });
+          let ms = 0, runs = 0;
+          for (let i = 0; i < REFEREE_RUNS; i++) { refRun = await runBreakerTest(t, { dir: ARENA_REF, url }); ms += refRun.ms || 0; runs++; if (!refRun.pass) break; }
+          refRun = { ...refRun, ms };
           verdict = refRun.pass ? 'admitted' : 'rejected';
-          reason = refRun.pass ? 'passes on the hidden reference fix' : `fails on the hidden reference fix, so it is an invalid attack: ${refRun.error || 'failed'}`;
+          reason = refRun.pass ? `passes on the hidden reference fix (${REFEREE_RUNS}/${REFEREE_RUNS} runs)`
+            : runs > 1 ? `flaky: passed ${runs - 1} time(s) then failed on run ${runs} against the hidden reference fix: ${refRun.error || 'failed'}`
+            : `fails on the hidden reference fix, so it is an invalid attack: ${refRun.error || 'failed'}`;
         }
         const a = { id: t.id, name: t.name, kind: t.kind, code: t.code, plan: t.plan, verdict, reason, refMs: refRun?.ms ?? 0 };
         r.attacks.push(a);

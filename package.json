@@ -7,6 +7,7 @@
     "reset": "node scripts/reset.js",
     "start": "node src/server.js",
     "bench": "node scripts/bench.js",
+    "kill-ports": "node scripts/kill-ports.js",
     "inject": "node scripts/inject.js",
     "test:app": "node scripts/test-live.js",
     "test:gate": "node --test test-gate/gate.test.js",

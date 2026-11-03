@@ -4,7 +4,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { LIVE, STAGING, STAGING_PORT, APP_PORT, ROOT } from './paths.js';
 import { sh, startApp, waitHealthy } from './proc.js';
-import { checkDiff, ALLOWLIST } from './gate.js';
+import { checkDiff, checkTreeDiff, ALLOWLIST } from './gate.js';
 import { runTestsAgainst } from './tests.js';
 import { runPlan } from './reproducer.js';
 
@@ -42,6 +42,13 @@ export async function applyDiff(diff) {
   return { ok: r.code === 0, error: (r.err || r.out).trim().slice(0, 400) };
 }
 
+// git diff --no-index of live vs staging for each changed file (exit 1 = differences, which is expected).
+export async function treeDiff(changed, a = LIVE, b = STAGING) {
+  let out = '';
+  for (const f of changed) out += (await sh('git', ['diff', '--no-index', '--no-color', '-U0', path.join(a, f), path.join(b, f)], { env: GIT_ENV })).out;
+  return out;
+}
+
 // Gate + test stage. Returns {ok, gate, apply, treeViolations, tests, stagingRepro, reasons}
 export async function gateAndTest(diff, { baseline, plan, log, forbidLines }) {
   const gate = checkDiff(diff, { forbidLines });
@@ -53,6 +60,9 @@ export async function gateAndTest(diff, { baseline, plan, log, forbidLines }) {
   const changed = changedFiles(LIVE, STAGING);
   const treeViolations = changed.filter((f) => !ALLOWLIST.has(f));
   if (treeViolations.length) { log?.('gate', `post-apply tree check BLOCK: ${treeViolations.join(', ')}`); return { ok: false, stage: 'tree', gate, treeViolations, reasons: [`changed non-allowlisted files: ${treeViolations}`] }; }
+  // Re-run the content checks on what really changed on disk (live vs staging), not on the diff text.
+  const tree = checkTreeDiff(await treeDiff(changed), { forbidLines });
+  if (!tree.ok) { log?.('gate', `post-apply content check BLOCK: ${tree.reasons.join('; ')}`); return { ok: false, stage: 'tree', gate, treeCheck: tree, reasons: tree.reasons }; }
   const srv = await startApp(STAGING, STAGING_PORT);
   if (!srv.ok) { await srv.stop(); return { ok: false, stage: 'boot', gate, reasons: ['staging server failed to boot'] }; }
   const url = `http://127.0.0.1:${STAGING_PORT}`;

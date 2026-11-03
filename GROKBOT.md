@@ -9,6 +9,8 @@ and POSTs the result back. The control screen shows "Grok Bot (cloud browser)" w
   turns this off), and then the Fixer, diff gate, staging tests and re-repro run as usual.
 - If the webhook call fails, or no valid callback arrives within `GROKBOT_TIMEOUT_MS` (default 150000),
   the pipeline falls back to local Playwright. The card and log say "Playwright FALLBACK (...: reason)".
+  For a live demo set `GROKBOT_TIMEOUT_MS=30000` to `45000`; while waiting, the control screen's **Skip to Playwright
+  fallback** button (POST `/api/skip-grokbot`) ends the wait at once.
 - If the Grok Bot values below are not set, the Reproducer is local Playwright, as before.
 
 Labels: the card shows `REAL` only when the webhook URL is not on this machine. A webhook on 127.0.0.1/localhost

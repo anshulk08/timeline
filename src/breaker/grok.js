@@ -1,7 +1,7 @@
 // REAL Breaker: one Grok call per arena round writes up to 3 adversarial tests aimed at the proposed patch.
 // It never sees the hidden reference fix. Output format is strict JSON; parsing tolerates code fences.
 import { chat, parseJSON } from '../llm.js';
-import { MODEL } from '../env.js';
+import { MODEL, MODE_LABEL } from '../env.js';
 export const name = 'grok';
 const SYS = `You are the Breaker. A Fixer agent just patched a bug in a small notes web app (Jotter). The patch passes the existing tests.
 Your job: write up to 3 adversarial tests that a CORRECT, COMPLETE fix of this bug must pass but that this patch might FAIL
@@ -32,5 +32,5 @@ export async function attack({ issue, diff, files, round, prior = [] }) {
   const user = `Bug report from a user: ${issue.text}\nTriage summary: ${issue.summary}\nArena round ${round}.\n\nProposed patch:\n${diff}\n\n${listing}` +
     (prior.length ? `\n\nAlready-admitted tests (do not repeat): ${JSON.stringify(prior.map((t) => t.name))}` : '');
   const content = await chat([{ role: 'system', content: SYS }, { role: 'user', content: user }], { model: MODEL, json: true });
-  return { tests: parseTests(content), source: `REAL grok Breaker (${MODEL})`, ms: Date.now() - t0 };
+  return { tests: parseTests(content), source: `grok Breaker (${MODEL}) [${MODE_LABEL}]`, ms: Date.now() - t0 };
 }

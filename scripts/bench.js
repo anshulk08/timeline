@@ -4,6 +4,9 @@ import { closeBrowser } from '../src/reproducer.js';
 import { stopLive } from '../src/shipper.js';
 import { POSTS } from './posts.js';
 
+import { controlUp } from './control-client.js';
+import { CONTROL_PORT } from '../src/paths.js';
+if (await controlUp()) { console.error(`bench: the control server is running on :${CONTROL_PORT}. bench resets live/ and needs ports 4000/4001; stop npm start first (Ctrl-C), or run \`npm run kill-ports\`.`); process.exit(2); }
 const runs = Number(process.argv[2] || 2);
 const fixer = process.argv[3];
 const p = new Pipeline({ fixer });

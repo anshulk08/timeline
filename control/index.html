@@ -183,12 +183,19 @@ for (const [label, text, atk] of PRESETS) {
   const b = document.createElement('button'); b.type = 'button'; b.textContent = label; if (atk) b.className = 'atk';
   b.onclick = () => post(text, atk ? 'mallory' : 'judge'); $('presets').append(b);
 }
-async function post(text, author) { follow = true; await fetch('/api/inject', { method:'POST', headers:{'content-type':'application/json'}, body: JSON.stringify({ text, author, createdAt: Date.now() }) }); }
+const TOKEN = '__CONTROL_TOKEN__'; // per-boot control API token, filled in by the server
+const api = (p, body) => fetch(p, { method:'POST', headers:{ 'content-type':'application/json', 'x-control-token': TOKEN }, body: JSON.stringify(body || {}) });
+// While Reset bugs runs (about 3 s), injecting would race the reset; the server queues it anyway, the UI disables it.
+function setResetting(on) {
+  for (const b of document.querySelectorAll('#presets button, #f button, #reset')) b.disabled = on;
+  $('reset').textContent = on ? 'Resetting...' : 'Reset bugs';
+}
+async function post(text, author) { follow = true; await api('/api/inject', { text, author, createdAt: Date.now() }); }
 $('f').onsubmit = (e) => { e.preventDefault(); if ($('t').value.trim()) post($('t').value, $('a').value); $('t').value = ''; };
-$('reset').onclick = async () => { $('reset').disabled = true; await fetch('/api/reset', { method:'POST' }); $('reset').disabled = false; };
+$('reset').onclick = async () => { setResetting(true); try { await api('/api/reset'); } finally { setResetting(false); } };
 $('feed').onclick = (e) => { const c = e.target.closest('.card'); if (!c) return; focusId = c.dataset.id; follow = false; render(); };
 $('follow').onclick = () => { follow = true; render(); };
-$('focus').onclick = (e) => { const im = e.target.closest('img.thumb'); if (!im) return; $('lightbox').querySelector('img').src = im.src; $('lightbox').style.display = 'flex'; };
+$('focus').onclick = (e) => { const sk = e.target.closest('button[data-skip]'); if (sk) { sk.disabled = true; sk.textContent = 'skipping...'; api('/api/skip-grokbot'); return; } const im = e.target.closest('img.thumb'); if (!im) return; $('lightbox').querySelector('img').src = im.src; $('lightbox').style.display = 'flex'; };
 $('lightbox').onclick = () => { $('lightbox').style.display = 'none'; };
 
 // ---------- arena state from SSE events ----------
@@ -243,7 +250,7 @@ function reproBox(r) {
   else if (by === 'playwright-fallback') { title = 'Playwright fallback'; tag = `<span class="tag mock">Grok Bot gave no result: ${esc(rp.error || '')}</span>`; }
   else { title = 'Playwright (local browser)'; tag = '<span class="tag">Grok Bot not configured</span>'; }
   const running = r.stages.reproduce?.status === 'running';
-  const status = running ? (by === 'grokbot' ? '<div class="waiting">handed off, waiting for the Grok Bot callback...</div>' : '<div class="waiting">reproducing...</div>')
+  const status = running ? (by === 'grokbot' ? '<div class="waiting">handed off, waiting for the Grok Bot callback... <button type="button" data-skip>Skip to Playwright fallback</button></div>' : '<div class="waiting">reproducing...</div>')
     : r.repro ? `<div class="obs"><b class="${r.repro.reproduced ? '' : ''}">${r.repro.reproduced ? 'REPRODUCED' : 'NOT reproduced'}</b>${rp?.waitMs ? ` <span class="dim">in ${sec(rp.waitMs)}</span>` : ''}: ${esc(rp?.observed || (r.repro.failures || []).join('; '))}</div>` : '';
   const steps = rp?.steps?.length ? `<ol class="st">${rp.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : '';
   const xc = rp?.crossCheck ? `<div class="dim">Playwright cross-check: ${rp.crossCheck.reproduced ? 'agrees' : 'DISAGREES (staging re-repro and tests still gate the fix)'}</div>` : '';
@@ -349,6 +356,7 @@ function logLine(e) {
 const es = new EventSource('/events');
 es.addEventListener('hello', (m) => {
   const h = hello = JSON.parse(m.data);
+  setResetting(!!h.resetting);
   const label = h.modeLabel || h.mode;
   $('mode').textContent = h.mode === 'MOCK' ? 'MOCK · no xAI key, canned outputs' : label; $('mode').className = 'badge ' + modeCls(label);
   $('mode').title = h.mode === 'MOCK' ? 'No xAI key: Fixer and Breaker outputs are canned, no Grok calls are made' : label;
@@ -366,6 +374,8 @@ es.addEventListener('hello', (m) => {
 es.addEventListener('update', (m) => { const r = JSON.parse(m.data); recs.set(r.id, r); arenaFromRecord(r); schedule(); });
 es.addEventListener('arena', (m) => { onArena(JSON.parse(m.data)); schedule(); });
 es.addEventListener('log', (m) => logLine(JSON.parse(m.data)));
+es.addEventListener('resetting', () => setResetting(true));
+es.addEventListener('resetting_done', () => setResetting(false));
 es.addEventListener('reset', () => { recs.clear(); arena.clear(); logLine({ t: Date.now(), stage: 'reset', msg: '---- bugs re-planted, live app reset ----' }); render(); });
 es.addEventListener('poll', (m) => { const p = JSON.parse(m.data); logLine({ t: p.t, stage: 'xsearch', msg: p.error ? 'poll error: ' + p.error : `poll: ${p.n} posts, ${p.apiMs} ms` }); });
 </script>

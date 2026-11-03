@@ -119,7 +119,8 @@ $ npm run test:gate
   - a check for protected path names;
   - a check for forbidden identifiers in every changed line (auth/admin/role/perm/user/token/session/secret/cookie/storage/fetch/eval/script/URLs, substring-matched so `isAdmin` is caught);
   - no file creates, deletes, renames or binary patches, and at most 30 changed lines.
-- After `git apply`, a hash-based check rejects any changed file outside the allowlist.
+  - (Fixed Nov 2, after review) the parser used to treat any `+++ <path>` line as a file header, even inside a hunk, so an added line `++ b/public/index.html <script>…` passed with 0 counted lines and `git apply --recount` still wrote it. Headers now count only before a file's first `@@`, and there is a regression test.
+- After `git apply`, a hash-based check rejects any changed file outside the allowlist, and the identifier / line-count / Breaker-paste checks run again on `git diff --no-index` of live vs staging (what really changed on disk).
 - Tests must show no regressions and at least one test that failed before must now pass. The reproduction must not reproduce on staging.
 - After deploy, the live app gets a health check and the reproduction runs again. If either fails, the shipper runs `git revert` and restarts the app (covered by the rollback test).
 - The gate tests caught one real gap while I was building: `\badmin` did not match `isAdmin`. I fixed it.
@@ -143,12 +144,12 @@ cd ~/grokathon/complaint-commit
 npm start                       # control screen http://localhost:4100 ; demo app http://localhost:4000
                                 # source: inject only in MOCK; inject + xsearch when a key exists (--source inject|xsearch|both)
 npm run inject -- "@jotterapp the export button is broken" judge   # or use the preset buttons on the control screen
-npm run reset                   # restore the 3 bugs (the control screen's "Reset bugs" does this too and restarts the app)
-npm run bench -- 3              # headless benchmark table (MOCK or REAL by key)
+npm run reset                   # restore the 3 bugs; goes through the running server if there is one (= "Reset bugs")
+npm run bench -- 3              # headless benchmark table (MOCK or REAL by key); refuses to run while npm start is up
 npm run test:gate               # diff-gate, end-to-end block, and rollback tests
 npm run test:app                # app test suite against live/
 npm run measure-x-latency       # needs key; you post on X yourself
 ```
 Each shipped fix is a commit in `live/` (a nested repo that git ignores), viewable at http://localhost:4100/changes/<sha>. The full action log goes to `runs/actions.jsonl` and the per-post records to `runs/records.jsonl`.
-Stop the server with Ctrl-C, which also stops the app child. If you see "port 4000 already serving", kill the orphan with `lsof -ti tcp:4000 | xargs kill`.
+Stop the server with Ctrl-C or `kill <pid>`; both stop every app child (live, staging, arena reference). If you see "port 4000 already serving" (e.g. after `kill -9`), run `npm run kill-ports`.
 Ports 4000/4001/4100 are defaults. Override them with `APP_PORT`, `STAGING_PORT` and `CONTROL_PORT`, for example if the other project uses them.

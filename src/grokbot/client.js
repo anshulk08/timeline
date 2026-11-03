@@ -54,6 +54,8 @@ export class GrokBot {
   describe() { return describe(this.cfg); }
   async start() { if (!this.started) { await this.callbacks.listen(); this.started = true; } }
   async stop() { if (this.started) { this.started = false; await this.callbacks.close(); } }
+  // Operator escape hatch (control screen "Skip to Playwright"): stop waiting for callbacks; the pipeline falls back.
+  skipWaiting(reason = 'skipped by operator') { const ids = [...this.callbacks.pending.keys()]; for (const id of ids) this.callbacks.cancel(id, reason); return ids.length; }
 
   // Returns {ok, job_id, result?, error?, dispatchMs, waitMs, screenshotFile?}
   async reproduce({ complaint, author, name = 'grokbot', timeoutMs = this.cfg.timeoutMs }) {

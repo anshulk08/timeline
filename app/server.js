@@ -25,4 +25,4 @@ http.createServer((req, res) => {
   res.setHeader('content-type', TYPES[u.split('.').pop()]);
   res.setHeader('cache-control', 'no-store');
   res.end(body);
-}).listen(PORT, () => console.log(`jotter listening on ${PORT}`));
+}).listen(PORT, process.env.HOST || '127.0.0.1', () => console.log(`jotter listening on ${PORT}`)); // loopback only; the tunnel targets 127.0.0.1

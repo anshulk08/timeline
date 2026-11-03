@@ -1,6 +1,6 @@
 // REAL fixer: Grok writes a unified diff. One retry with the apply error if it does not apply.
 import { chat } from '../llm.js';
-import { MODEL } from '../env.js';
+import { MODEL, MODE_LABEL } from '../env.js';
 const SYS = `You fix bugs in a small web app. Output ONLY a unified diff (git format) and nothing else, no prose, no code fences.
 Rules: paths are relative to the app root with a/ and b/ prefixes (e.g. "--- a/public/app.js" / "+++ b/public/app.js"). Only edit the files shown.
 Make the smallest possible change. Do not add comments. Do not touch auth, users, roles, permissions, admin, storage, network calls, or tests.
@@ -14,5 +14,5 @@ export async function fix({ issue, repro, files, previousError, previousDiff, br
       `\nReturn a NEW complete diff against the ORIGINAL files shown above (not on top of your previous patch) that fixes the bug and passes these tests. Fix the behaviour; do not paste test code into the app.` : '');
   let diff = await chat([{ role: 'system', content: SYS }, { role: 'user', content: user }], { model: MODEL });
   diff = diff.replace(/^```\w*\n?/m, '').replace(/\n?```\s*$/m, '').trim() + '\n';
-  return { diff, source: `REAL grok (${MODEL})` };
+  return { diff, source: `grok (${MODEL}) [${MODE_LABEL}]` };
 }

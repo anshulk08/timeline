@@ -32,6 +32,17 @@ test('referee rejects a Breaker test that fails on the hidden reference fix, adm
   assert.deepEqual(events.map((e) => e.type), ['patch_proposed', 'attack', 'attack', 'attack_result']);
 });
 
+test('referee rejects implementation-detail tests: function source is not observable in the sandbox', async () => {
+  reset(); prepareStaging();
+  assert.equal((await applyDiff(canned('export.retry.diff'))).ok, true); // behaviourally correct, written differently from the reference
+  const SOURCE = { name: 'uses csvCell', kind: 'unit', code: "assert.ok(lib.toCSV.toString().includes('csvCell'), 'toCSV does not escape cells');" };
+  const PROTO = { name: 'proto source', kind: 'unit', code: "assert.ok(Function.prototype.toString.call(lib.toCSV).includes('csvCell'));" };
+  const a = new Arena({ issue: ISSUE, breaker: fakeBreaker({ 1: [SOURCE, PROTO, COMMA] }) });
+  const r = await a.round({ round: 1, diff: canned('export.retry.diff'), source: 'test' });
+  assert.deepEqual(r.attacks.map((x) => x.verdict), ['rejected', 'rejected', 'admitted']);
+  assert.deepEqual(r.results.map((x) => x.result), ['survived']); // the correct candidate is not killed
+});
+
 test('an admitted test that fails on the candidate is fed back to the Fixer, which retries', async () => {
   const calls = [];
   const fixer = { name: 'test-fixer', fix: async (args) => { calls.push(args); return { diff: canned(args.breakerFailures ? 'export.retry.diff' : 'export.diff'), source: 'TEST' }; } };

@@ -1,7 +1,8 @@
 // Gatekeeper: classify a post as bug | feature | noise | attack and group duplicates.
 // Layer 1 (always, deterministic): attack rules. Layer 2: Grok (REAL) or keyword rules (MOCK).
 // NOTE: this is defence in depth only; the diff gate in gate.js is the hard enforcement.
-import { MODE, FAST_MODEL } from './env.js';
+import { MODE, FAST_MODEL, XAI_STUB } from './env.js';
+const REAL_LABEL = XAI_STUB ? 'LOCAL STUB' : 'REAL';
 import { chat, parseJSON } from './llm.js';
 
 const ATTACK_RULES = [
@@ -47,6 +48,6 @@ Return ONLY JSON: {"category":"bug|feature|noise|attack","signature":"short-keba
 - "feature": asks for new functionality. "noise": anything else.
 - If the bug is the same as one of these open issues, reuse its signature exactly: ${JSON.stringify(openIssues.map((i) => ({ signature: i.signature, summary: i.summary })))}`;
   const out = parseJSON(await chat([{ role: 'system', content: sys }, { role: 'user', content: `Post by @${post.author}: ${post.text}` }], { json: true, model: FAST_MODEL }));
-  if (atk && out.category !== 'attack') return { ...out, category: 'attack', reason: `rule layer override (${atk}); grok said ${out.category}`, mode: 'REAL' };
-  return { ...out, mode: 'REAL' };
+  if (atk && out.category !== 'attack') return { ...out, category: 'attack', reason: `rule layer override (${atk}); grok said ${out.category}`, mode: REAL_LABEL };
+  return { ...out, mode: REAL_LABEL };
 }
