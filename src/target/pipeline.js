@@ -7,6 +7,7 @@ import path from 'node:path';
 import { MODE, MODE_LABEL, CANDIDATE_MODELS, BREAKER_MODEL } from '../env.js';
 import { RUNS } from '../paths.js';
 import * as A from './agents.js';
+import { grokbotVerifyOn, buildVerifyJob, dispatchVerify } from './grokbot-verify.js';
 const FIX_ATTEMPTS = Math.max(1, Number(process.env.FIX_ATTEMPTS || 2)); // per candidate; attempt 2 gets attempt 1's diff + failure output (REAL only)
 import {
   loadTarget, resolveRef, checkTargetDiff, decideTier, git, gitOk, addWorktree, removeWorktree, applyPatch, commitAll,
@@ -309,6 +310,7 @@ export class TargetPipeline extends EventEmitter {
         issue.status = 'pr-ready'; rec.status = 'pr-ready'; rec.sha = sha; rec.prBranch = branch;
         rec.reply = `@${rec.post.author} Reproduced with a failing test; a fix is ready for maintainer review on ${branch}.`;
       }
+      this.grokbotVerify(rec, issue, base, sha, winner.files); // fire-and-forget, never blocks the pipeline
       return this.finish(rec);
     } catch (e) {
       issue.status = 'failed'; rec.status = 'error'; rec.error = e.message;
@@ -321,6 +323,16 @@ export class TargetPipeline extends EventEmitter {
         if (ref) await removeWorktree(cfg.repo, ref);
       }).catch(() => {});
     }
+  }
+
+  // Independent re-check of the winning patch on Grok Bot's own cloud computer (AutoMaintainer Verify routine).
+  grokbotVerify(rec, issue, base, sha, files) {
+    if (!grokbotVerifyOn() || this.agents.noGrokbotVerify) return;
+    const bug = this.cfg.seeded_bugs.find((b) => b.id === issue.signature);
+    const em = (r) => { this.ev('grokbot_verify', { id: issue.signature, postId: rec.id, ...r }); this.log(rec, 'grokbot', r.status === 'dispatched' ? `Grok Bot verify job dispatched: run ${r.runUuid} (${r.bytes} B, ${r.ms} ms); result in Grok Bot chat` : `Grok Bot verify ${r.status}: ${r.reason}`); };
+    if (!bug?.grokbot_check || !this.cfg.grokbot_verify) return em({ status: 'skipped', reason: 'no grokbot_check for this bug in target.json', ms: 0, bytes: 0 });
+    buildVerifyJob({ cfg: this.cfg, bug, base, sha, files }).then(dispatchVerify)
+      .then((r) => em({ ...r, status: r.status }), (e) => em({ status: 'error', reason: e.message.slice(0, 160), ms: 0, bytes: 0 }));
   }
 
   prBody({ rec, issue, winner, repro, tier, branch, sha }) {

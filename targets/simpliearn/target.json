@@ -32,6 +32,7 @@
     "RAG/stockchartgenerationV2.py",
     "RAG/tests/test_stock_chart_pct.py"
   ],
+  "grokbot_verify": { "repo_url": "https://github.com/gt-big-data/simpli-earn", "public_base_sha": "18c545e", "seeded_sha": "aebe2d0" },
   "seeded_bugs": [
     {
       "id": "qoq-endpoint-typo",
@@ -39,7 +40,8 @@
       "expected_tier": "auto",
       "files": ["frontend/components/QoQComparison.tsx"],
       "repro_test": { "name": "frontend-unit", "match": "QoQ comparison posts to the backend /compare route" },
-      "reference_patch": "targets/simpliearn/reference/qoq-endpoint-typo.diff"
+      "reference_patch": "targets/simpliearn/reference/qoq-endpoint-typo.diff",
+      "grokbot_check": "cd frontend; grep -n \"API_BASE_URL}/compare\" components/QoQComparison.tsx"
     },
     {
       "id": "stock-pct-base",
@@ -48,6 +50,7 @@
       "files": ["RAG/stockchartgenerationV2.py"],
       "repro_test": { "name": "rag-stock-chart", "match": "test_pct_changes_are_relative_to_event_day_open" },
       "reference_patch": "targets/simpliearn/reference/stock-pct-base.diff",
+      "grokbot_check": "cd RAG; grep -nF \"start_price = perfect_hours_df['Close'].iloc[0]\" stockchartgenerationV2.py",
       "trap": "The obvious fix (base = first raw close on/after the event day, e.g. close_prices[close_prices.index >= day_start].iloc[0]) crashes on tz-naive vs tz-aware comparison and has no data on weekend/holiday events; the correct base is the backfilled 48h grid open perfect_hours_df['Close'].iloc[0]."
     }
   ],

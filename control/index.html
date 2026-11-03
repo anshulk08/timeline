@@ -196,6 +196,11 @@
 <div id="prview" role="dialog" aria-label="PR body"><button type="button" id="prclose" style="float:right">Close</button><div id="prbody"></div></div>
 <div class="grid">
   <section class="col">
+    <form id="fx" style="margin-bottom:6px">
+      <input id="xurl" placeholder="Real X post URL, e.g. https://x.com/user/status/123..." aria-label="X post URL">
+      <button>Fetch from X</button>
+    </form>
+    <div id="fxmsg" class="dim" style="font-size:12px;margin-bottom:6px"></div>
     <form id="f">
       <input id="t" placeholder="Simulate an X post, e.g. @jotterapp export is broken" aria-label="Post text">
       <input id="a" placeholder="author" value="judge" style="flex:0 1 100px" aria-label="Author">
@@ -246,6 +251,13 @@ function setResetting(on) {
 }
 async function post(text, author) { follow = true; await api('/api/inject', { text, author, createdAt: Date.now() }); }
 $('f').onsubmit = (e) => { e.preventDefault(); if ($('t').value.trim()) post($('t').value, $('a').value); $('t').value = ''; };
+$('fx').onsubmit = async (e) => {
+  e.preventDefault(); const url = $('xurl').value.trim(); if (!url) return;
+  if (!/^https?:\/\/(www\.|mobile\.)?(x|twitter)\.com\/\w{1,15}\/status\/\d+/i.test(url)) { $('fxmsg').textContent = 'Not an x.com/twitter.com status URL'; return; }
+  follow = true; $('fxmsg').textContent = 'Grok x_search is fetching the post from X...';
+  try { const r = await api('/api/ingest-x', { url }); const t = await r.text(); if (!r.ok) { $('fxmsg').textContent = 'Fetch failed: ' + t; return; } const j = JSON.parse(t); $('fxmsg').textContent = `Fetched @${j.post.author} from X by Grok in ${(j.post.fetchMs / 1000).toFixed(1)}s`; $('xurl').value = ''; }
+  catch (err) { $('fxmsg').textContent = 'Fetch failed: ' + err.message; }
+};
 $('reset').onclick = async () => { setResetting(true); try { await api('/api/reset'); } finally { setResetting(false); } };
 $('feed').onclick = (e) => { const c = e.target.closest('.card'); if (!c) return; focusId = c.dataset.id; follow = false; render(); };
 $('follow').onclick = () => { follow = true; render(); };
@@ -275,12 +287,17 @@ function arenaFromRecord(r) {
 }
 
 // ---------- rendering ----------
+function xline(p) {
+  if (!p?.url) return '';
+  const when = p.postedAt ? new Date(p.postedAt).toLocaleString() : '';
+  return `<div class="dim" style="font-size:11px">real X post${when ? ' &middot; ' + esc(when) : ''} &middot; <a href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.url.replace(/^https:\/\//, ''))}</a> &middot; fetched from X by Grok</div>`;
+}
 function card(r) {
   const v = r.verdict?.category || 'pending';
   const t = r.doneAt ? `<span class="mini">${sec(r.totalMs)}</span>` : '';
   return `<div class="card${r.id === focusId ? ' sel' : ''}" data-id="${esc(r.id)}">
     <div class="top"><span class="who">${esc(r.id)} &middot; @${esc(r.post.author)} &middot; ${esc(r.post.source)}</span><span class="verdict v-${esc(v)}">${esc(v)}</span></div>
-    <div class="ctext">${esc(r.post.text)}</div>
+    <div class="ctext">${esc(r.post.text)}</div>${xline(r.post)}
     <div class="top"><span class="status s-${esc(r.status)}">${esc(r.status)}${r.attempts > 1 ? ` &middot; ${r.attempts} attempts` : ''}</span>${t}</div>
   </div>`;
 }
@@ -409,7 +426,7 @@ function logLine(e) {
 }
 
 // ---------- BDBI AutoMaintainer: new pipeline events -> per-issue stage strip ----------
-const AM_EVENTS = ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready'];
+const AM_EVENTS = ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready', 'grokbot_verify'];
 const am = new Map(); // id -> { repro, cands:{n,models}, lanes: Map(k -> ev), tier, auto, pr, t0 }
 function amOf(id) { if (!am.has(id)) am.set(id, { lanes: new Map() }); return am.get(id); }
 function onAm(type, e) {
@@ -422,6 +439,7 @@ function onAm(type, e) {
   else if (type === 'tier') x.tier = e;
   else if (type === 'auto_applied') x.auto = e;
   else if (type === 'pr_ready') x.pr = e;
+  else if (type === 'grokbot_verify') x.gb = e;
   document.body.classList.add('am');
 }
 function setTarget(h) {
@@ -432,13 +450,19 @@ const stg = (cls, label, val, detail, extra = '') => `<div class="stg ${cls}"><d
 const shortModel = (m) => esc(String(m || '?').replace(/-0309/, '').replace(/-non-reasoning$/, ' fast').replace(/-reasoning$/, ' reason'));
 const LANE_LABEL = { running: 'running', 'gate-fail': 'gate fail', 'tests-fail': 'tests fail', pass: 'pass', 'arena-killed': 'killed', winner: 'winner', lost: 'lost' };
 
+function gbLine(g) {
+  if (!g) return '';
+  const msg = g.status === 'dispatched' ? `Grok Bot verifying on its own cloud computer &mdash; run <b>${esc(g.runUuid || '?')}</b> (result in Grok Bot chat) &middot; ${esc(g.bytes)} B, ${esc(g.ms)} ms`
+    : `Grok Bot verify ${esc(g.status)}: ${esc(g.reason || '')}`;
+  return `<div class="dim" style="font-size:12px;padding:4px 8px">${msg}</div>`;
+}
 function strip(id) {
   const r = recs.get(id); const x = am.get(id) || { lanes: new Map() }; const a = arena.get(id);
   const st = r?.stages || {};
   // 1. X post
   const post = r?.post;
   const txt = post ? esc(post.text).replace(/(@\w+)/g, '<span class="h">$1</span>') : '<span class="dim">waiting for post...</span>';
-  const s1 = `<div class="stg ok"><div class="sl"><span>X post</span><span>${esc(post?.source || '')}</span></div><div class="sd"><b>@${esc(post?.author || '?')}</b></div><div class="xpost">${txt}</div></div>`;
+  const s1 = `<div class="stg ok"><div class="sl"><span>X post</span><span>${esc(post?.source || '')}</span></div><div class="sd"><b>@${esc(post?.author || '?')}</b></div><div class="xpost">${txt}</div>${xline(post)}</div>`;
   // 2. classify
   const cat = r?.verdict?.category;
   const s2 = stg(cat ? (cat === 'bug' ? 'ok' : cat === 'attack' ? 'bad' : 'warn') : r ? 'run' : 'idle', 'Classify', cat ? esc(cat.toUpperCase()) : 'running', cat ? esc(r.verdict.signature || r.verdict.reason || '') : '');
@@ -489,7 +513,7 @@ function strip(id) {
   else if (r && ['refused', 'blocked', 'failed', 'killed', 'error', 'rolled-back'].includes(r.status)) s7 = stg('bad', 'Outcome', esc(r.status.toUpperCase()), esc((r.gate?.reasons || []).join('; ') || r.error || ''));
   else s7 = stg('idle', 'Outcome', '&ndash;', 'auto-deploy or PR for review');
   const tot = r?.doneAt ? sec(r.totalMs) : '';
-  return `<div class="strip${id === focusId ? ' sel' : ''}" data-id="${esc(id)}"><div class="strip-h"><span class="iid">${esc(x.sig ? `${id} · ${x.sig}` : id)}</span><span>${esc(r?.status || 'running')}</span><span class="tot">${tot}</span></div><div class="stages">${s1}${s2}${s3}${s4}${s5}${s6}${s7}</div></div>`;
+  return `<div class="strip${id === focusId ? ' sel' : ''}" data-id="${esc(id)}"><div class="strip-h"><span class="iid">${esc(x.sig ? `${id} · ${x.sig}` : id)}</span><span>${esc(r?.status || 'running')}</span><span class="tot">${tot}</span></div><div class="stages">${s1}${s2}${s3}${s4}${s5}${s6}${s7}</div>${gbLine(x.gb)}</div>`;
 }
 function renderAm() {
   if (!document.body.classList.contains('am')) return;

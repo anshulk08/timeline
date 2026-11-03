@@ -1,5 +1,5 @@
 // REAL source: polls Grok's server-side x_search tool (Responses API) for new posts mentioning @handle.
-import { X_HANDLE, MODE, FAST_MODEL } from '../env.js';
+import { X_HANDLE, MODE } from '../env.js';
 import { responsesXSearch, parseJSON } from '../llm.js';
 
 export async function searchMentions({ handle = X_HANDLE, query = null, sinceDate } = {}) {
@@ -11,13 +11,13 @@ export async function searchMentions({ handle = X_HANDLE, query = null, sinceDat
     : `Use X search (keyword search, latest mode) to find the most recent X posts that mention @${handle}. `;
   const t0 = Date.now();
   const r = await responsesXSearch(ask + `Return ONLY JSON: {"posts":[{"id":"post id","url":"https://x.com/...","author":"handle","text":"full text","created_at":"ISO 8601"}]}. Newest first, max 20. If none, {"posts":[]}.`,
-    { from_date: from, to_date: to }, { model: FAST_MODEL });
+    { from_date: from, to_date: to }); // default (reasoning) model: FAST_MODEL answers '0 posts' without calling the tool
   let posts = [];
   try { posts = parseJSON(r.text).posts || []; } catch {}
   return { posts, citations: r.citations, apiMs: Date.now() - t0, usage: r.usage };
 }
 
-export function createXSearchListener(onPost, { pollMs = Number(process.env.X_POLL_MS) || 10000, onPoll } = {}) {
+export function createXSearchListener(onPost, { pollMs = Number(process.env.X_POLL_MS) || 30000, onPoll } = {}) {
   if (MODE !== 'REAL') throw new Error('xsearch listener needs XAI_API_KEY in ~/grokathon/.env');
   const seen = new Set();
   const startedAt = Date.now();

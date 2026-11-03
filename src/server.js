@@ -7,6 +7,7 @@ import { Pipeline } from './pipeline.js';
 import { TargetPipeline } from './target/pipeline.js';
 import { TARGET, isConfigTarget } from './target/core.js';
 import { createListener } from './listener/index.js';
+import { parseXUrl, fetchXPost } from './listener/xfetch.js';
 import { liveShow, liveLog, stopLive } from './shipper.js';
 import { stopAllChildren } from './proc.js';
 import { ROOT, RUNS, CONTROL_PORT, APP_PORT } from './paths.js';
@@ -25,7 +26,7 @@ pipeline.on('arena', (e) => { arenaLog.push(e); send('arena', e); }); // Patch A
 // Config-target events (TARGET=<name>): repro_test, candidates, candidate, tier, auto_applied, pr_ready
 let targetLog = [];
 pipeline.on('reset', () => { targetLog = []; });
-for (const t of ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready']) pipeline.on(t, (e) => { targetLog.push({ type: t, ...e }); send(t, e); });
+for (const t of ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready', 'grokbot_verify']) pipeline.on(t, (e) => { targetLog.push({ type: t, ...e }); send(t, e); });
 
 const listeners = [];
 const inject = createListener('inject', (p) => pipeline.handlePost(p));
@@ -71,6 +72,17 @@ http.createServer(async (req, res) => {
       if (typeof b.text !== 'string' || !b.text.trim()) return deny(res, 400, 'text required');
       inject.inject(b);
       return res.end(JSON.stringify({ queued: true, afterReset: resetting }));
+    }
+    if (u.pathname === '/api/ingest-x') { // fetch one real X post by URL with Grok x_search, then run it like an injected post
+      if (!parseXUrl(b.url)) return deny(res, 400, 'url must be an x.com/twitter.com status URL (https://x.com/<user>/status/<id>)');
+      if (MODE !== 'REAL') return deny(res, 503, 'ingest-x needs XAI_API_KEY (REAL mode)');
+      send('log', { t: Date.now(), stage: 'x-fetch', msg: `Grok x_search fetching ${b.url} ...` });
+      let p;
+      try { p = await fetchXPost(b.url); } catch (e) { send('log', { t: Date.now(), stage: 'x-fetch', msg: `fetch failed: ${e.message}` }); return deny(res, e.status || 502, `fetch failed: ${e.message}`); }
+      send('log', { t: Date.now(), stage: 'x-fetch', msg: `fetched from X by Grok in ${p.fetchMs} ms: @${p.author} (${p.postedAt || '?'}): ${p.text}` });
+      const { usage, ...post } = p;
+      pipeline.handlePost(post).catch(() => {});
+      return res.end(JSON.stringify({ queued: true, post: { author: post.author, postedAt: post.postedAt, url: post.url, id: post.externalId, text: post.text, fetchMs: post.fetchMs } }));
     }
     if (u.pathname === '/api/reset') {
       resetting = true; send('resetting', { t: Date.now() });

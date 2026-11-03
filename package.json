@@ -9,6 +9,7 @@
     "bench": "node scripts/bench.js",
     "kill-ports": "node scripts/kill-ports.js",
     "inject": "node scripts/inject.js",
+    "ingest-x": "node scripts/ingest-x.js",
     "test:app": "node scripts/test-live.js",
     "test:gate": "node --test test-gate/gate.test.js",
     "test:target": "node --test test-gate/target.test.js",
