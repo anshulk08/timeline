@@ -6,11 +6,13 @@ const headers = () => ({ 'content-type': 'application/json', authorization: `Bea
 export const llmMode = () => MODE;
 
 // OpenAI-compatible chat completion. Returns string content.
-export async function chat(messages, { model = MODEL, json = false, temperature = 0, timeoutMs = 90000 } = {}) {
+export async function chat(messages, { model = MODEL, json = false, temperature = 0, timeoutMs = 90000, maxTokens, signal } = {}) {
   if (MODE !== 'REAL') throw new Error('chat() called in MOCK mode');
   const body = { model, messages, temperature };
   if (json) body.response_format = { type: 'json_object' };
-  const r = await fetch(`${BASE}/chat/completions`, { method: 'POST', headers: headers(), body: JSON.stringify(body), signal: AbortSignal.timeout(timeoutMs) });
+  if (maxTokens) body.max_tokens = maxTokens;
+  const sig = signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
+  const r = await fetch(`${BASE}/chat/completions`, { method: 'POST', headers: headers(), body: JSON.stringify(body), signal: sig });
   if (!r.ok) throw new Error(`xAI chat ${r.status}: ${(await r.text()).slice(0, 300)}`);
   const j = await r.json();
   return j.choices?.[0]?.message?.content ?? '';
