@@ -123,13 +123,65 @@
   .log div { padding:3px 0; border-bottom:1px dashed #1f2228; overflow-wrap:anywhere; }
   .log .s { color:var(--run); } .log .t { color:var(--faint); } .log .s-arena { color:var(--brk); }
 
+  /* ---------- BDBI AutoMaintainer: projector-first stage strips ---------- */
+  header a, .badge { white-space:nowrap; }
+  header .tgt { font:600 16px system-ui, sans-serif; color:#c9bfff; background:#221f38; border:1px solid #3d3766; padding:4px 11px; border-radius:7px; white-space:nowrap; }
+  header { flex-wrap:nowrap; overflow:hidden; } header .chip { flex-shrink:1; overflow:hidden; text-overflow:ellipsis; min-width:0; }
+  @media (max-width: 1400px) { #c-listen, #c-repro { display:none; } }
+  #am { display:none; padding:12px 16px 4px; }
+  body.am #am { display:block; }
+  body.am .grid { height:auto; min-height:60vh; border-top:1px solid var(--line); }
+  .strip { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:10px 12px 12px; margin-bottom:12px; }
+  .strip.sel { border-color:#2e4c8f; }
+  .strip-h { display:flex; gap:12px; align-items:baseline; margin:0 2px 8px; font:14px var(--mono); color:var(--dim); }
+  .strip-h .iid { font:700 16px var(--mono); color:var(--text); }
+  .strip-h .tot { margin-left:auto; font:700 16px var(--mono); color:var(--text); }
+  .stages { display:grid; grid-template-columns: 1.2fr .62fr 1fr 1.95fr .95fr .72fr 1.56fr; gap:8px; align-items:stretch; }
+  .stg { position:relative; background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:8px 10px; min-width:0; overflow:hidden; }
+  .stg + .stg::before { content:'\25B6'; position:absolute; left:-1px; top:50%; transform:translate(-50%,-50%); font-size:9px; color:var(--faint); }
+  .stg .sl { font:700 11px var(--mono); text-transform:uppercase; letter-spacing:.8px; color:var(--dim); display:flex; justify-content:space-between; gap:6px; }
+  .stg .sv { font:800 18px/1.2 system-ui, sans-serif; margin:4px 0 3px; overflow-wrap:anywhere; }
+  .stg .sd { font:13px/1.35 var(--mono); color:var(--dim); overflow-wrap:anywhere; }
+  .stg .sd b { color:var(--text); font-weight:600; }
+  .stg.ok { border-color:#23683f; background:#10261a; } .stg.ok .sv { color:var(--ok); }
+  .stg.run { border-color:#2e4c8f; background:var(--run-bg); } .stg.run .sv { color:var(--run); }
+  .stg.bad { border-color:#6b2c26; background:var(--bad-bg); } .stg.bad .sv { color:var(--bad); }
+  .stg.warn { border-color:#6b5418; background:var(--warn-bg); } .stg.warn .sv { color:var(--warn); }
+  .stg.idle { opacity:.55; }
+  .stg.run .sl::after { content:''; width:8px; height:8px; border-radius:50%; background:var(--run); animation:pulse 1s infinite; align-self:center; }
+  @media (prefers-reduced-motion: reduce) { .stg.run .sl::after { animation:none; } }
+  .xpost { font:500 15px/1.35 system-ui, sans-serif; color:var(--text); margin-top:4px; display:-webkit-box; -webkit-line-clamp:5; -webkit-box-orient:vertical; overflow:hidden; }
+  .xpost .h { color:#a8c4ff; }
+  .lane { display:grid; grid-template-columns: 18px minmax(0,1fr) auto; gap:6px; align-items:center; padding:5px 6px; margin-top:4px; border-radius:6px; background:#12141a; border:1px solid var(--line); font:13px var(--mono); }
+  .lane .k { color:var(--faint); font-weight:700; }
+  .lane .m { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); }
+  .lane .st { font:700 11px var(--mono); padding:2px 6px; border-radius:4px; text-transform:uppercase; white-space:nowrap; }
+  .lane .ms { color:var(--dim); font-size:12px; }
+  .lane.winner { border-color:var(--ok); background:#10261a; } .lane.winner .m { color:var(--ok); font-weight:700; }
+  .lane.lost, .lane.gate-fail, .lane.tests-fail, .lane.arena-killed { opacity:.75; }
+  .ls-running { background:var(--run-bg); color:#a8c4ff; } .ls-pass { background:#1d3a2a; color:var(--ok); } .ls-winner { background:var(--ok); color:#06210f; }
+  .ls-gate-fail, .ls-tests-fail, .ls-arena-killed { background:var(--bad-bg); color:var(--bad); } .ls-lost { background:#2a2c30; color:var(--dim); }
+  .nums { display:flex; gap:6px; flex-wrap:wrap; margin-top:4px; }
+  .num { font:700 13px var(--mono); padding:3px 7px; border-radius:5px; background:#12141a; border:1px solid var(--line); }
+  .num.g { color:var(--ok); } .num.r { color:var(--bad); } .num.b { color:#a8c4ff; } .num.d { color:var(--dim); }
+  .tierv { font:900 26px/1.1 var(--mono); letter-spacing:1px; margin:6px 0 4px; }
+  .out-auto .sv { font-size:22px; }
+  .sha { font:700 16px var(--mono); color:var(--text); background:#0b1d12; border:1px solid #23683f; padding:2px 7px; border-radius:5px; }
+  .prc .ttl { font:700 15px/1.3 system-ui, sans-serif; color:var(--text); margin:3px 0; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+  .prc .sd a { color:#a8c4ff; }
+  .files { font:12px var(--mono); color:var(--dim); margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .am-legend { font:13px var(--mono); color:var(--faint); margin:0 2px 8px; }
+  #prview { position:fixed; inset:5vh 8vw; background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:16px; z-index:6; display:none; overflow:auto; }
+  #prview pre { max-height:none; white-space:pre-wrap; font-size:14px; }
+
   #lightbox { position:fixed; inset:0; background:rgba(0,0,0,.85); display:none; align-items:center; justify-content:center; padding:30px; z-index:5; cursor:zoom-out; }
   #lightbox img { max-width:100%; max-height:100%; border-radius:8px; }
 </style>
 </head>
 <body>
 <header>
-  <h1>Complaint &rarr; Commit</h1>
+  <h1>BDBI AutoMaintainer</h1>
+  <span id="tgt" class="tgt">Jotter demo</span>
   <span id="mode" class="badge">connecting</span>
   <span id="c-repro" class="chip"></span>
   <span id="c-fixer" class="chip"></span>
@@ -140,6 +192,8 @@
   <a href="/changes" target="_blank" rel="noopener">change log</a>
   <button id="reset" type="button">Reset bugs</button>
 </header>
+<section id="am" aria-live="polite"></section>
+<div id="prview" role="dialog" aria-label="PR body"><button type="button" id="prclose" style="float:right">Close</button><div id="prbody"></div></div>
 <div class="grid">
   <section class="col">
     <form id="f">
@@ -342,6 +396,7 @@ function render() {
   f.innerHTML = focusPanel();
   for (const d of f.querySelectorAll('details')) if (open.has(d.querySelector('summary')?.textContent + '|' + (d.closest('.atk')?.querySelector('.id')?.textContent || d.closest('.side')?.querySelector('.lbl')?.textContent || ''))) d.open = true;
   f.scrollTop = y;
+  renderAm();
 }
 let pending = false;
 const schedule = () => { if (!pending) { pending = true; requestAnimationFrame(() => { pending = false; render(); }); } };
@@ -353,31 +408,189 @@ function logLine(e) {
   while ($('log').childElementCount > 400) $('log').lastChild.remove();
 }
 
-const es = new EventSource('/events');
-es.addEventListener('hello', (m) => {
-  const h = hello = JSON.parse(m.data);
+// ---------- BDBI AutoMaintainer: new pipeline events -> per-issue stage strip ----------
+const AM_EVENTS = ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready'];
+const am = new Map(); // id -> { repro, cands:{n,models}, lanes: Map(k -> ev), tier, auto, pr, t0 }
+function amOf(id) { if (!am.has(id)) am.set(id, { lanes: new Map() }); return am.get(id); }
+function onAm(type, e) {
+  if (!e || e.id == null) return;
+  const x = amOf(String(e.id));
+  if (type === 'repro_test') x.repro = e;
+  else if (type === 'candidates') x.cands = e;
+  else if (type === 'candidate') { const k = e.k ?? x.lanes.size; x.lanes.set(k, { ...(x.lanes.get(k) || {}), ...e }); }
+  else if (type === 'tier') x.tier = e;
+  else if (type === 'auto_applied') x.auto = e;
+  else if (type === 'pr_ready') x.pr = e;
+  document.body.classList.add('am');
+}
+function setTarget(h) {
+  const n = h?.target?.display_name || h?.target_display_name || h?.display_name || (typeof h?.target === 'string' ? h.target : '') || h?.targetName;
+  $('tgt').textContent = n || 'Jotter demo';
+}
+const stg = (cls, label, val, detail, extra = '') => `<div class="stg ${cls}"><div class="sl"><span>${label}</span>${extra}</div>${val != null ? `<div class="sv">${val}</div>` : ''}${detail ? `<div class="sd">${detail}</div>` : ''}</div>`;
+const shortModel = (m) => esc(String(m || '?').replace(/-0309/, '').replace(/-non-reasoning$/, ' fast').replace(/-reasoning$/, ' reason'));
+const LANE_LABEL = { running: 'running', 'gate-fail': 'gate fail', 'tests-fail': 'tests fail', pass: 'pass', 'arena-killed': 'killed', winner: 'winner', lost: 'lost' };
+
+function strip(id) {
+  const r = recs.get(id); const x = am.get(id) || { lanes: new Map() }; const a = arena.get(id);
+  const st = r?.stages || {};
+  // 1. X post
+  const post = r?.post;
+  const txt = post ? esc(post.text).replace(/(@\w+)/g, '<span class="h">$1</span>') : '<span class="dim">waiting for post...</span>';
+  const s1 = `<div class="stg ok"><div class="sl"><span>X post</span><span>${esc(post?.source || '')}</span></div><div class="sd"><b>@${esc(post?.author || '?')}</b></div><div class="xpost">${txt}</div></div>`;
+  // 2. classify
+  const cat = r?.verdict?.category;
+  const s2 = stg(cat ? (cat === 'bug' ? 'ok' : cat === 'attack' ? 'bad' : 'warn') : r ? 'run' : 'idle', 'Classify', cat ? esc(cat.toUpperCase()) : 'running', cat ? esc(r.verdict.signature || r.verdict.reason || '') : '');
+  // 3. repro test
+  let s3;
+  if (x.repro) {
+    const ok = x.repro.status === 'fails-before';
+    s3 = stg(ok ? 'ok' : 'bad', 'Repro test', ok ? 'Fails&nbsp;before&nbsp;&#10003;' : 'Invalid', `<b>${esc(x.repro.test_name || '')}</b><br>${esc(x.repro.file || '')}${x.repro.ms != null ? `<br>${sec(x.repro.ms)}` : ''}`);
+  } else if (st.reproduce) {
+    const s = st.reproduce; s3 = stg(s.status === 'ok' ? 'ok' : s.status === 'running' ? 'run' : 'bad', 'Repro', s.status === 'ok' ? 'Reproduced' : s.status === 'running' ? 'writing test' : 'Failed', sec(s.ms));
+  } else s3 = stg(cat === 'bug' ? 'run' : 'idle', 'Repro test', cat === 'bug' ? 'writing test' : '&ndash;', 'Grok writes a test that must fail on the current code');
+  // 4. Grok sub-agent race
+  const lanes = [...x.lanes.values()].sort((p, q) => (p.k ?? 0) - (q.k ?? 0));
+  const models = x.cands?.models || [];
+  const n = x.cands?.n || lanes.length || models.length;
+  const laneRows = (lanes.length ? lanes : models.map((m, k) => ({ k, model: m, status: 'running' }))).slice(0, 4).map((l) => {
+    const s = l.status || 'running';
+    return `<div class="lane ${esc(s)}"><span class="k">${esc(l.k ?? '')}</span><span class="m" title="${esc(l.model)}">${shortModel(l.model)}</span><span><span class="ms">${l.lines != null ? `${esc(l.lines)}L ` : ''}${l.ms != null ? sec(l.ms) : ''}</span> <span class="st ls-${esc(s)}">${esc(LANE_LABEL[s] || s)}</span></span></div>`;
+  }).join('') + (lanes.length > 4 ? `<div class="sd">+${lanes.length - 4} more</div>` : '');
+  const winner = lanes.find((l) => l.status === 'winner');
+  const raceCls = winner ? 'ok' : lanes.length && lanes.every((l) => !['running', 'pass'].includes(l.status)) ? 'bad' : n ? 'run' : st.fix ? (st.fix.status === 'ok' ? 'ok' : st.fix.status === 'running' ? 'run' : 'bad') : 'idle';
+  const s4 = `<div class="stg ${raceCls}"><div class="sl"><span>Grok sub-agents race</span><span>${n ? `${n} candidates` : ''}</span></div>${laneRows || `<div class="sv">${st.fix ? esc(st.fix.status) : '&ndash;'}</div><div class="sd">parallel Grok fixers, first validated patch wins</div>`}</div>`;
+  // 5. Patch Arena
+  let s5;
+  if (a?.rounds?.size) {
+    const all = [...a.rounds.values()]; const atks = all.flatMap((y) => y.attacks); const res = all.flatMap((y) => [...y.results.values()]);
+    const adm = atks.filter((y) => y.verdict === 'admitted').length, rej = atks.length - adm;
+    const killed = res.filter((y) => y.result === 'killed').length, surv = res.filter((y) => y.result !== 'killed').length;
+    const v = a.verdict?.result; const done = !!v;
+    const big = !done ? 'under attack' : /ship|surviv|pass/i.test(v) ? 'Survived' : /kill/i.test(v) ? 'Killed' : esc(v);
+    s5 = `<div class="stg ${!done ? 'run' : /kill/i.test(v) ? 'bad' : 'ok'}"><div class="sl"><span>Patch Arena</span><span>${all.length} rd</span></div><div class="sv">${big}</div><div class="nums"><span class="num b">${adm} admitted</span><span class="num d">${rej} rejected</span><span class="num g">${surv} survived</span><span class="num r">${killed} killed</span></div></div>`;
+  } else if (st.arena) s5 = stg(st.arena.status === 'running' ? 'run' : st.arena.status === 'ok' ? 'ok' : 'bad', 'Patch Arena', esc(st.arena.status), sec(st.arena.ms));
+  else s5 = stg('idle', 'Patch Arena', '&ndash;', hello && !hello.breaker ? 'off' : 'Grok Breaker attacks the winner');
+  // 6. tier
+  let s6;
+  if (x.tier) {
+    const t = x.tier.tier; const cls = t === 'auto' ? 'ok' : t === 'pr' ? 'warn' : 'bad';
+    s6 = `<div class="stg ${cls}"><div class="sl"><span>Tier</span></div><div class="tierv" style="color:var(--${cls === 'ok' ? 'ok' : cls === 'warn' ? 'warn' : 'bad'})">${esc(t === 'pr' ? 'PR' : String(t || '?').toUpperCase())}</div><div class="sd">${(x.tier.reasons || []).slice(0, 3).map(esc).join('<br>')}</div></div>`;
+  } else s6 = stg('idle', 'Tier', '&ndash;', 'auto / pr / blocked');
+  // 7. outcome
+  let s7;
+  if (x.auto) s7 = `<div class="stg ok out-auto"><div class="sl"><span>Auto-deploy</span><span>${x.auto.ms != null ? sec(x.auto.ms) : ''}</span></div><div class="sv">Deployed &#10003;</div><div class="sd"><span class="sha">${esc(String(x.auto.sha || '').slice(0, 7))}</span><br>on <b>${esc(x.auto.branch || '')}</b></div></div>`;
+  else if (x.pr) {
+    const files = x.pr.files || [];
+    s7 = `<div class="stg warn prc"><div class="sl"><span>PR ready</span><span>${x.pr.ms != null ? sec(x.pr.ms) : ''}</span></div><div class="sv" style="font-size:16px">PR ready for maintainer review</div><div class="ttl">${esc(x.pr.title || '')}</div><div class="sd"><b>${esc(x.pr.branch || '')}</b> &rarr; ${esc(x.pr.base || '')}</div><div class="files" title="${esc(files.join(', '))}">${files.length} file${files.length === 1 ? '' : 's'}: ${esc(files.join(', '))}</div><div class="sd"><a href="/runs/pr/${encodeURIComponent(id)}.md" data-pr="${esc(id)}">view PR body</a></div></div>`;
+  } else if (x.tier?.tier === 'blocked') s7 = stg('bad', 'Outcome', 'Blocked', 'forbidden file / identifier, nothing applied');
+  else if (r?.status === 'shipped') s7 = stg('ok', 'Outcome', 'Shipped &#10003;', `<span class="sha">${esc(r.sha || '')}</span>`);
+  else if (r && ['refused', 'blocked', 'failed', 'killed', 'error', 'rolled-back'].includes(r.status)) s7 = stg('bad', 'Outcome', esc(r.status.toUpperCase()), esc((r.gate?.reasons || []).join('; ') || r.error || ''));
+  else s7 = stg('idle', 'Outcome', '&ndash;', 'auto-deploy or PR for review');
+  const tot = r?.doneAt ? sec(r.totalMs) : '';
+  return `<div class="strip${id === focusId ? ' sel' : ''}" data-id="${esc(id)}"><div class="strip-h"><span class="iid">${esc(id)}</span><span>${esc(r?.status || 'running')}</span><span class="tot">${tot}</span></div><div class="stages">${s1}${s2}${s3}${s4}${s5}${s6}${s7}</div></div>`;
+}
+function renderAm() {
+  if (!document.body.classList.contains('am')) return;
+  const ids = [...new Set([...am.keys()])];
+  const order = ids.slice().reverse();
+  if (focusId && order.includes(focusId)) { order.splice(order.indexOf(focusId), 1); order.unshift(focusId); }
+  $('am').innerHTML = order.length ? order.slice(0, 6).map(strip).join('') : '';
+}
+$('am').onclick = async (e) => {
+  const l = e.target.closest('a[data-pr]'); if (!l) return;
+  e.preventDefault(); const id = l.dataset.pr; const x = am.get(id);
+  let text = '';
+  try { const res = await fetch(l.getAttribute('href')); if (res.ok && /text|markdown/.test(res.headers.get('content-type') || '')) text = await res.text(); } catch {}
+  if (!text) text = x?.pr?.body || `# ${x?.pr?.title || id}\n\n(PR body file ${x?.pr?.body_path || `runs/pr/${id}.md`} is not served by this control server yet)`;
+  $('prbody').innerHTML = `<h2>${esc(x?.pr?.title || id)}</h2><pre>${esc(text)}</pre>`; $('prview').style.display = 'block';
+};
+$('prclose').onclick = () => { $('prview').style.display = 'none'; };
+
+// ---------- ?demo=1: hardcoded SimpliEarn run replayed with timing, no backend needed ----------
+function runDemo() {
+  const t0 = Date.now();
+  const P1 = { id: 'p1', post: { author: 'bdbi_member', source: 'x', text: '@SimpliEarn my newest chat is stuck at the bottom of the history sidebar, have to scroll forever' } };
+  const P2 = { id: 'p2', post: { author: 'quant_kid', source: 'x', text: '@SimpliEarn asked the earnings chat about NVDA guidance and it quoted a totally different call transcript' } };
+  const rec = (p, status, extra = {}) => ({ id: p.id, post: { createdAt: t0, ...p.post }, status, stages: {}, attempts: 1, ...extra });
+  const bug = (sig) => ({ category: 'bug', signature: sig, reason: 'reproducible defect' });
+  const M = ['grok-4.20-0309-non-reasoning', 'grok-4.20-0309-reasoning', 'grok-4.7'];
+  const ev = [
+    [0, 'hello', { mode: 'MOCK', modeLabel: 'MOCK', fixer: 'grok race', breaker: { name: 'grok breaker', mode: 'MOCK' }, listeners: ['xsearch'], handle: 'SimpliEarn', reproducer: { target: 'local' }, appUrl: '#', target: { display_name: 'SimpliEarn (BDBI)' }, records: [], arena: [] }],
+    [200, 'update', rec(P1, 'queued')],
+    [700, 'update', rec(P1, 'reproducing', { verdict: bug('chat-history order') })],
+    [1500, 'repro_test', { id: 'p1', test_name: 'newest chat sorts first', file: 'frontend/lib/chat-history.test.ts', status: 'fails-before', ms: 2140 }],
+    [1700, 'candidates', { id: 'p1', n: 3, models: M }],
+    ...M.map((m, k) => [1750 + k * 50, 'candidate', { id: 'p1', k, model: m, status: 'running' }]),
+    [2600, 'candidate', { id: 'p1', k: 0, model: M[0], status: 'pass', ms: 3120, lines: 2 }],
+    [2900, 'candidate', { id: 'p1', k: 2, model: M[2], status: 'tests-fail', ms: 5400, lines: 9 }],
+    [3200, 'arena', { postId: 'p1', type: 'patch_proposed', round: 1, source: M[0], changedLines: 2, mode: 'MOCK' }],
+    [3400, 'arena', { postId: 'p1', type: 'attack', round: 1, id: 'B1', name: 'equal timestamps keep stable order', kind: 'unit', verdict: 'admitted', reason: 'passes on reference fix' }],
+    [3450, 'arena', { postId: 'p1', type: 'attack', round: 1, id: 'B2', name: 'empty history returns []', kind: 'unit', verdict: 'admitted', reason: 'passes on reference fix' }],
+    [3500, 'arena', { postId: 'p1', type: 'attack', round: 1, id: 'B3', name: 'sort by title instead', kind: 'unit', verdict: 'rejected', reason: 'fails on reference fix: wrong spec' }],
+    [3900, 'arena', { postId: 'p1', type: 'attack_result', round: 1, id: 'B1', result: 'survived' }],
+    [4000, 'arena', { postId: 'p1', type: 'attack_result', round: 1, id: 'B2', result: 'survived' }],
+    [4050, 'arena', { postId: 'p1', type: 'verdict', result: 'ship', attempts: 1, rounds: 1, reason: 'survived all admitted tests' }],
+    [4100, 'candidate', { id: 'p1', k: 0, model: M[0], status: 'winner', ms: 3120, lines: 2 }],
+    [4100, 'candidate', { id: 'p1', k: 1, model: M[1], status: 'lost', ms: 4210, lines: 3 }],
+    [4300, 'tier', { id: 'p1', tier: 'auto', reasons: ['frontend/lib/** only', '2 lines <= 8', 'no forbid hits'] }],
+    [4700, 'auto_applied', { id: 'p1', branch: 'automaintainer-demo', sha: 'a3f9c21', ms: 410 }],
+    [4750, 'update', rec(P1, 'shipped', { verdict: bug('chat-history order'), doneAt: t0 + 4750, totalMs: 9820, sha: 'a3f9c21' })],
+    [5200, 'update', rec(P2, 'queued')],
+    [5700, 'update', rec(P2, 'reproducing', { verdict: bug('RAG wrong transcript') })],
+    [6400, 'repro_test', { id: 'p2', test_name: 'test_retrieve_filters_by_ticker', file: 'RAG/tests/test_retrieval.py', status: 'fails-before', ms: 3310 }],
+    [6600, 'candidates', { id: 'p2', n: 3, models: M }],
+    ...M.map((m, k) => [6650 + k * 50, 'candidate', { id: 'p2', k, model: m, status: 'running' }]),
+    [7300, 'candidate', { id: 'p2', k: 0, model: M[0], status: 'gate-fail', ms: 2900, lines: 14 }],
+    [7800, 'candidate', { id: 'p2', k: 2, model: M[2], status: 'pass', ms: 6720, lines: 11 }],
+    [8000, 'arena', { postId: 'p2', type: 'patch_proposed', round: 1, source: M[2], changedLines: 11, mode: 'MOCK' }],
+    [8100, 'arena', { postId: 'p2', type: 'attack', round: 1, id: 'B1', name: 'lowercase ticker still filters', kind: 'pytest', verdict: 'admitted', reason: 'passes on reference fix' }],
+    [8150, 'arena', { postId: 'p2', type: 'attack', round: 1, id: 'B2', name: 'drop ticker filter entirely', kind: 'pytest', verdict: 'rejected', reason: 'fails on reference fix' }],
+    [8600, 'arena', { postId: 'p2', type: 'attack_result', round: 1, id: 'B1', result: 'survived' }],
+    [8650, 'arena', { postId: 'p2', type: 'verdict', result: 'ship', attempts: 1, rounds: 1, reason: 'survived' }],
+    [8700, 'candidate', { id: 'p2', k: 2, model: M[2], status: 'winner', ms: 6720, lines: 11 }],
+    [8700, 'candidate', { id: 'p2', k: 1, model: M[1], status: 'lost', ms: 7010, lines: 12 }],
+    [8900, 'tier', { id: 'p2', tier: 'pr', reasons: ['RAG/** is PR tier', '11 lines > 8'] }],
+    [9300, 'pr_ready', { id: 'p2', branch: 'automaintainer/p2-rag-ticker', base: 'automaintainer-demo', title: 'Fix: RAG retrieval ignores ticker filter (seeded demo bug)', body_path: 'runs/pr/p2.md', files: ['RAG/retrieval.py', 'RAG/tests/test_retrieval.py'], ms: 520,
+      body: '## Fix: RAG retrieval ignores ticker filter\n\nSeeded demo bug.\n\nComplaint (X): "asked the earnings chat about NVDA guidance and it quoted a totally different call transcript"\n\n- Repro test fails before, passes after\n- 3 Grok candidates raced; grok-4.7 won\n- Patch Arena: 1 admitted attack survived, 1 rejected\n- Tier: PR (RAG/** not in auto globs, 11 changed lines > 8)' }],
+    [9350, 'update', rec(P2, 'pr-ready', { verdict: bug('RAG wrong transcript'), doneAt: t0 + 9350, totalMs: 12480 })],
+  ];
+  for (const [ms, type, data] of ev) setTimeout(() => { try { H[type](data); } catch (err) { console.error(type, err); } }, ms);
+}
+
+const H = {};
+H.hello = (h) => {
+  hello = h;
   setResetting(!!h.resetting);
   const label = h.modeLabel || h.mode;
-  $('mode').textContent = h.mode === 'MOCK' ? 'MOCK · no xAI key, canned outputs' : label; $('mode').className = 'badge ' + modeCls(label);
+  $('mode').textContent = h.mode === 'MOCK' ? 'MOCK · canned' : label; $('mode').className = 'badge ' + modeCls(label);
   $('mode').title = h.mode === 'MOCK' ? 'No xAI key: Fixer and Breaker outputs are canned, no Grok calls are made' : label;
   const rp = h.reproducer || { label: 'Playwright (local)', target: 'local' };
   $('c-repro').innerHTML = `reproducer <b>${esc(rp.target === 'REAL' ? 'Grok Bot (cloud browser)' : rp.target === 'local' ? 'Playwright (local)' : 'Grok Bot handoff')}</b>${rp.target && rp.target !== 'local' ? ` <span class="tag ${rp.target === 'REAL' ? 'real' : 'stub'}">${esc(rp.target)}</span>` : ''}`;
   $('c-fixer').innerHTML = `fixer <b>${esc(h.fixer)}</b>`;
   $('c-breaker').innerHTML = h.breaker ? `breaker <b>${esc(h.breaker.name)}</b> <span class="tag ${modeCls(h.breaker.mode)}">${esc(h.breaker.mode)}</span>` : 'arena <b>off</b>';
-  $('c-listen').innerHTML = `listen <b>${esc(h.listeners.join('+'))}</b> @${esc(h.handle)}`;
+  $('c-listen').innerHTML = `listen <b>${esc((h.listeners || []).join('+'))}</b> @${esc(h.handle)}`;
   $('applink').href = h.appUrl;
-  recs.clear(); arena.clear();
+  recs.clear(); arena.clear(); am.clear();
   for (const e of h.arena || []) onArena(e);
-  for (const r of h.records) { recs.set(r.id, r); arenaFromRecord(r); }
+  for (const r of h.records || []) { recs.set(r.id, r); arenaFromRecord(r); }
+  setTarget(h);
   render();
-});
-es.addEventListener('update', (m) => { const r = JSON.parse(m.data); recs.set(r.id, r); arenaFromRecord(r); schedule(); });
-es.addEventListener('arena', (m) => { onArena(JSON.parse(m.data)); schedule(); });
-es.addEventListener('log', (m) => logLine(JSON.parse(m.data)));
-es.addEventListener('resetting', () => setResetting(true));
-es.addEventListener('resetting_done', () => setResetting(false));
-es.addEventListener('reset', () => { recs.clear(); arena.clear(); logLine({ t: Date.now(), stage: 'reset', msg: '---- bugs re-planted, live app reset ----' }); render(); });
-es.addEventListener('poll', (m) => { const p = JSON.parse(m.data); logLine({ t: p.t, stage: 'xsearch', msg: p.error ? 'poll error: ' + p.error : `poll: ${p.n} posts, ${p.apiMs} ms` }); });
+};
+H.update = (r) => { recs.set(r.id, r); arenaFromRecord(r); schedule(); };
+H.arena = (e) => { onArena(e); schedule(); };
+H.log = (e) => logLine(e);
+H.resetting = () => setResetting(true);
+H.resetting_done = () => setResetting(false);
+H.reset = () => { recs.clear(); arena.clear(); am.clear(); logLine({ t: Date.now(), stage: 'reset', msg: '---- bugs re-planted, live app reset ----' }); render(); };
+H.poll = (p) => logLine({ t: p.t, stage: 'xsearch', msg: p.error ? 'poll error: ' + p.error : `poll: ${p.n} posts, ${p.apiMs} ms` });
+for (const t of AM_EVENTS) H[t] = (e) => { onAm(t, e); schedule(); };
+const DEMO = new URLSearchParams(location.search).has('demo');
+if (DEMO) runDemo();
+else {
+  const es = new EventSource('/events');
+  for (const t of Object.keys(H)) es.addEventListener(t, (m) => { let d = {}; try { d = JSON.parse(m.data || '{}'); } catch {} try { H[t](d); } catch (err) { console.error(t, err); } });
+}
 </script>
 </body>
 </html>
