@@ -4,7 +4,7 @@ import { sh, startApp } from './proc.js';
 export async function runTestsAgainst(dir, url) {
   const t0 = Date.now();
   const r = await sh(process.execPath, ['--test', '--test-reporter=tap', path.join('test', 'unit.test.js'), path.join('test', 'e2e.test.js')],
-    { cwd: dir, env: { ...process.env, APP_URL: url } });
+    { cwd: dir, env: { ...process.env, APP_URL: url, NODE_TEST_CONTEXT: undefined } }); // unset so the suite reports TAP when this runs under node --test
   const pass = [], fail = [];
   for (const line of r.out.split('\n')) {
     const m = line.match(/^\s*(not ok|ok) \d+ - (.+?)\s*$/);

@@ -10,7 +10,8 @@
     "inject": "node scripts/inject.js",
     "test:app": "node scripts/test-live.js",
     "test:gate": "node --test test-gate/gate.test.js",
-    "measure-x-latency": "node scripts/measure-x-latency.js"
+    "measure-x-latency": "node scripts/measure-x-latency.js",
+    "test:arena": "node --test --test-concurrency=1 test-gate/arena.test.js"
   },
   "dependencies": {
     "playwright": "^1.64.1"
