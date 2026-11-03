@@ -305,7 +305,7 @@ function arenaFromRecord(r) {
 }
 
 // ---------- BDBI AutoMaintainer pipeline events ----------
-const AM_EVENTS = ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready', 'grokbot_verify'];
+const AM_EVENTS = ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready', 'grokbot_verify', 'xexam_started', 'xexam_done'];
 const am = new Map(); // id -> { repro, cands:{n,models}, lanes: Map(k -> ev), tier, auto, pr, gb }
 function amOf(id) { if (!am.has(id)) am.set(id, { lanes: new Map() }); return am.get(id); }
 function onAm(type, e) {
@@ -319,6 +319,8 @@ function onAm(type, e) {
   else if (type === 'auto_applied') x.auto = e;
   else if (type === 'pr_ready') x.pr = e;
   else if (type === 'grokbot_verify') x.gb = e;
+  else if (type === 'xexam_started') x.xs = e;
+  else if (type === 'xexam_done') x.xd = e;
 }
 function setTarget(h) {
   const n = h?.target?.display_name || h?.target_display_name || h?.display_name || (typeof h?.target === 'string' ? h.target : '') || h?.targetName;
@@ -330,7 +332,26 @@ const FAIL = ['refused', 'blocked', 'failed', 'killed', 'error', 'rolled-back'];
 
 // ---------- one story per issue: seven steps ----------
 const STEP_NAMES = [['post', 'X post'], ['triage', 'Triage'], ['repro', 'Reproduce'], ['race', 'Grok race'], ['breaker', 'Breaker'], ['decision', 'Decision'], ['ship', 'Shipped']];
+// earnings-call claims: X post -> Triage (Claim) -> Cross-examine -> Receipt
+const CLAIM_STEPS = [['post', 'X post'], ['triage', 'Triage'], ['xexam', 'Cross-examine'], ['receipt', 'Receipt']];
+const VCLS = { SUPPORTED: 'ok', EXAGGERATED: 'warn', CONTRADICTED: 'bad', DIRECT: 'ok', PARTIAL: 'warn', NON_ANSWER: 'bad' };
+const vlabel = (v) => String(v || '?').toLowerCase().replace(/_/g, ' ');
+const isClaim = (id) => recs.get(id)?.verdict?.category === 'claim';
+const namesOf = (S) => S.__names || STEP_NAMES;
+function xdOf(id) { const x = am.get(id) || {}; const r = recs.get(id); return x.xd || (r?.xexam ? { ...r.xexam, examId: r.xexam.examId } : null); }
+function claimSteps(id) {
+  const r = recs.get(id); const x = am.get(id) || {}; const d = xdOf(id);
+  const S = { __names: CLAIM_STEPS };
+  S.post = ['ok', `@${r.post.author}`];
+  S.triage = ['ok', 'Claim'];
+  if (d) { const n = (d.claims || []).length; S.xexam = d.status === 'unavailable' || d.status === 'failed' ? ['bad', d.status] : ['ok', `${n} claim${n === 1 ? '' : 's'} checked`]; }
+  else S.xexam = ['run', x.xs ? `exam ${String(x.xs.examId).slice(0, 8)}` : 'starting'];
+  S.receipt = d?.receiptUrl && d.status !== 'unavailable' ? ['ok', d.status === 'partial' ? 'Partial receipt' : 'Receipt ready'] : d ? ['bad', 'No receipt'] : ['idle', ''];
+  S.ship = S.receipt;
+  return S;
+}
 function steps(id) {
+  if (isClaim(id)) return claimSteps(id);
   const r = recs.get(id); const x = am.get(id) || { lanes: new Map() }; const a = arena.get(id);
   const st = r?.stages || {}; const cat = r?.verdict?.category; const done = !!r?.doneAt;
   const S = {};
@@ -361,7 +382,7 @@ function steps(id) {
   return S;
 }
 function activeStep(S) {
-  const keys = STEP_NAMES.map(([k]) => k);
+  const keys = namesOf(S).map(([k]) => k);
   const run = keys.find((k) => S[k][0] === 'run'); if (run) return run;
   const bad = keys.find((k) => S[k][0] === 'bad'); if (bad) return bad;
   return keys.filter((k) => S[k][0] !== 'idle').at(-1) || 'post';
@@ -381,16 +402,24 @@ function decisionHtml(id, S) {
   const r = recs.get(id); const x = am.get(id) || {}; const a = arena.get(id);
   const sep = '<span class="sep">·</span>';
   let line, dot = 'run', state = 'Working';
-  if (x.auto) { line = `${kindOf(id)} ${sep} auto-applied ${sep} commit <code>${esc(String(x.auto.sha || '').slice(0, 7))}</code>`; dot = 'ok'; state = 'Shipped'; }
+  const d = isClaim(id) ? xdOf(id) : null;
+  if (isClaim(id) && d) {
+    const cl = d.claims || []; const cnt = {}; for (const c of cl) cnt[vlabel(c.verdict)] = (cnt[vlabel(c.verdict)] || 0) + 1;
+    line = d.status === 'unavailable' ? `Earnings claim ${sep} cross-examination unavailable` : `Earnings claim ${sep} ${cl.length} claim${cl.length === 1 ? '' : 's'} checked${Object.entries(cnt).map(([k, n]) => ` ${sep} ${n} ${esc(k)}`).join('')} ${sep} <a href="${esc(d.receiptUrl)}" target="_blank" rel="noopener">view receipt</a>`;
+    dot = d.status === 'completed' ? 'ok' : d.status === 'partial' ? 'warn' : 'bad'; state = d.status === 'unavailable' ? 'Unavailable' : 'Checked';
+  }
+  else if (isClaim(id)) { line = `Earnings claim ${sep} cross-examining…`; state = 'Checking'; }
+  else if (x.auto) { line = `${kindOf(id)} ${sep} auto-applied ${sep} commit <code>${esc(String(x.auto.sha || '').slice(0, 7))}</code>`; dot = 'ok'; state = 'Shipped'; }
   else if (x.pr) { line = `${kindOf(id)} ${sep} PR for maintainer review ${sep} <a href="/runs/pr/${encodeURIComponent(x.pr.id ?? id)}.md" data-pr="${esc(id)}">view PR</a>`; dot = 'ok'; state = 'PR ready'; }
   else if (x.tier?.tier === 'blocked') { line = 'Blocked by policy, nothing applied'; dot = 'bad'; state = 'Not shipped'; }
   else if (r?.status === 'shipped') { line = `Shipped ${sep} commit <a href="/changes/${esc(r.sha)}" target="_blank" rel="noopener"><code>${esc(String(r.sha || '').slice(0, 7))}</code></a>`; dot = 'ok'; state = 'Shipped'; }
   else if (r?.verdict?.category === 'attack') { line = 'Refused: this post tries to make the bot do something unsafe'; dot = 'bad'; state = 'Refused'; }
   else if (r && FAIL.includes(r.status)) { line = `Not shipped ${sep} ${esc(r.status)}`; dot = 'bad'; state = 'Not shipped'; }
   else if (r?.doneAt) { line = esc(r.status === 'duplicate' ? 'Duplicate of an issue already being fixed' : r.verdict?.category === 'feature' ? 'Feature request, logged for the maintainer' : r.status); dot = 'warn'; state = 'Closed'; }
-  else { const k = activeStep(S); line = `${STEP_NAMES.find(([q]) => q === k)[1]}${S[k][1] ? ` ${sep} ${esc(S[k][1])}` : ''}…`; }
+  else { const k = activeStep(S); line = `${namesOf(S).find(([q]) => q === k)[1]}${S[k][1] ? ` ${sep} ${esc(S[k][1])}` : ''}…`; }
   let sub = '';
-  if (r?.doneAt) sub = `From post to ${x.pr ? 'PR' : 'decision'} in ${sec(r.totalMs)}`;
+  if (r?.doneAt) sub = `From post to ${x.pr ? 'PR' : d ? 'receipt' : 'decision'} in ${sec(r.totalMs)}`;
+  if (d?.status === 'unavailable' && d.error) sub = `${esc(d.error)}${sub ? ' · ' + sub : ''}`;
   if (a?.verdict && a.verdict.attempts) sub += `${sub ? ', ' : ''}${a.verdict.attempts} attempt${a.verdict.attempts > 1 ? 's' : ''}`;
   const why = (x.tier?.tier === 'blocked' || (r && FAIL.includes(r.status))) ? esc((r?.gate?.reasons || []).join('; ') || a?.verdict?.reason || r?.verdict?.reason || r?.error || '') : '';
   const g = x.gb;
@@ -410,7 +439,8 @@ function postCard(r) {
 }
 
 function stepper(S, sel) {
-  return `<ol class="stepper">${STEP_NAMES.map(([k, n]) => `<li class="step ${S[k][0]}${k === sel ? ' sel' : ''}" data-k="${k}" tabindex="0" role="button" aria-pressed="${k === sel}"><span class="d"></span><span class="n">${n}</span><span class="c">${esc(S[k][1]) || '&nbsp;'}</span></li>`).join('')}</ol>`;
+  const N = namesOf(S);
+  return `<ol class="stepper"${N.length !== 7 ? ` style="grid-template-columns:repeat(${N.length}, minmax(0,1fr))"` : ''}>${N.map(([k, n]) => `<li class="step ${S[k][0]}${k === sel ? ' sel' : ''}" data-k="${k}" tabindex="0" role="button" aria-pressed="${k === sel}"><span class="d"></span><span class="n">${n}</span><span class="c">${esc(S[k][1]) || '&nbsp;'}</span></li>`).join('')}</ol>`;
 }
 
 // ---------- detail panels ----------
@@ -421,7 +451,7 @@ function pPost(r) {
 }
 function pTriage(r) {
   const v = r.verdict; if (!v) return `<h2>Triage</h2>${waiting('Grok is reading the post…')}`;
-  const lead = v.category === 'bug' ? 'Grok read the post as a reproducible bug report.' : v.category === 'attack' ? 'Grok flagged this post as an attempt to make the bot do something unsafe. Nothing was changed.' : v.category === 'feature' ? 'This is a feature request, not a bug. It is logged for the maintainer.' : 'Nothing actionable in this post.';
+  const lead = v.category === 'bug' ? 'Grok read the post as a reproducible bug report.' : v.category === 'attack' ? 'Grok flagged this post as an attempt to make the bot do something unsafe. Nothing was changed.' : v.category === 'claim' ? 'Grok read the post as a claim about an earnings call, so it goes to Cross-Examination instead of the fix pipeline.' : v.category === 'feature' ? 'This is a feature request, not a bug. It is logged for the maintainer.' : 'Nothing actionable in this post.';
   return `<h2>Triage</h2><p class="lead">${lead}</p><dl class="kv"><dt>Category</dt><dd>${esc(v.category)}</dd>${v.signature ? `<dt>Issue</dt><dd>${esc(v.signature)}</dd>` : ''}${v.reason ? `<dt>Reason</dt><dd>${esc(v.reason)}</dd>` : ''}<dt>Status</dt><dd>${esc(r.status)}</dd></dl>`;
 }
 function pRepro(r, x) {
@@ -498,7 +528,26 @@ function pShip(r, x) {
   if (r.reply) html += `<div class="reply"><small>Draft reply, not posted anywhere</small>${esc(r.reply)}</div>`;
   return html;
 }
+function claimList(d) {
+  const cl = d?.claims || [];
+  return cl.length ? `<ul class="list">${cl.map((c) => `<li style="display:flex;gap:10px;align-items:baseline;padding:8px 0"><span class="dot ${VCLS[c.verdict] || ''}"></span><span class="res" style="min-width:9em">${esc(vlabel(c.verdict))}</span><span>${esc(c.text)}</span></li>`).join('')}</ul>` : '<p class="lead">No checkable claims were found.</p>';
+}
+function pXexam(r) {
+  const d = xdOf(r.id); const x = am.get(r.id) || {};
+  if (!d) return `<h2>Cross-examine</h2>${waiting(x.xs ? `Cross-examination ${esc(x.xs.examId)} running against the call transcript…` : 'Starting cross-examination…')}`;
+  if (d.status === 'unavailable') return `<h2>Cross-examine</h2><p class="lead">The Cross-Examination backend could not be reached, so no verdicts are shown.</p><div class="out">${esc(d.error || '')}</div>`;
+  const call = d.call ? [d.call.company, d.call.ticker && `(${d.call.ticker})`, d.call.quarter].filter(Boolean).join(' ') : '';
+  return `<h2>Cross-examine</h2><p class="lead">Each claim was checked against the ${esc(call || 'earnings call')} transcript.</p>${claimList(d)}${d.dodge ? `<div class="note"><span class="dot ${VCLS[d.dodge.verdict] || ''}"></span> Q&amp;A dodge meter: ${esc(vlabel(d.dodge.verdict))}</div>` : ''}<dl class="kv" style="margin-top:12px"><dt>Exam</dt><dd class="mono">${esc(d.examId || '')}</dd><dt>Status</dt><dd>${esc(d.status)}</dd>${d.ms != null ? `<dt>Time</dt><dd>${sec(d.ms)}</dd>` : ''}</dl>`;
+}
+function pReceipt(r) {
+  const d = xdOf(r.id);
+  let html = !d ? `<h2>Receipt</h2>${waiting('Not there yet…')}` : d.receiptUrl && d.status !== 'unavailable' ? `<h2>Receipt</h2><p class="lead"><a href="${esc(d.receiptUrl)}" target="_blank" rel="noopener">Open the receipt</a> with transcript quotes and timestamps.</p>${claimList(d)}` : `<h2>Receipt</h2><p class="lead">No receipt: ${esc(d.error || d.status)}</p>`;
+  if (r.reply) html += `<div class="reply"><small>Draft reply, not posted anywhere</small>${esc(r.reply)}</div>`;
+  return html;
+}
 function detail(k, r, x) {
+  if (k === 'xexam') return pXexam(r);
+  if (k === 'receipt') return pReceipt(r);
   return k === 'post' ? pPost(r) : k === 'triage' ? pTriage(r) : k === 'repro' ? pRepro(r, x) : k === 'race' ? pRace(r, x) : k === 'breaker' ? pBreaker(r) : k === 'decision' ? pDecision(r, x) : pShip(r, x);
 }
 
@@ -524,7 +573,7 @@ function tabs(list) {
 
 function render() {
   const list = [...recs.values()];
-  if (follow) { const bugs = list.filter((r) => r.verdict?.category === 'bug' && r.status !== 'duplicate'); focusId = (bugs.at(-1) || list.at(-1))?.id || null; }
+  if (follow) { const bugs = list.filter((r) => ['bug', 'claim'].includes(r.verdict?.category) && r.status !== 'duplicate'); focusId = (bugs.at(-1) || list.at(-1))?.id || null; }
   $('tabs').innerHTML = tabs(list);
   $('follow').innerHTML = follow || list.length < 2 ? '' : '<a href="#">Follow latest</a>';
   const f = $('focus');

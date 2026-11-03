@@ -26,7 +26,7 @@ pipeline.on('arena', (e) => { arenaLog.push(e); send('arena', e); }); // Patch A
 // Config-target events (TARGET=<name>): repro_test, candidates, candidate, tier, auto_applied, pr_ready
 let targetLog = [];
 pipeline.on('reset', () => { targetLog = []; });
-for (const t of ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready', 'grokbot_verify']) pipeline.on(t, (e) => { targetLog.push({ type: t, ...e }); send(t, e); });
+for (const t of ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready', 'grokbot_verify', 'xexam_started', 'xexam_done']) pipeline.on(t, (e) => { targetLog.push({ type: t, ...e }); send(t, e); });
 
 const listeners = [];
 const inject = createListener('inject', (p) => pipeline.handlePost(p));

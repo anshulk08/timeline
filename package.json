@@ -12,7 +12,7 @@
     "ingest-x": "node scripts/ingest-x.js",
     "test:app": "node scripts/test-live.js",
     "test:gate": "node --test test-gate/gate.test.js",
-    "test:target": "node --test test-gate/target.test.js",
+    "test:target": "node --test test-gate/target.test.js test-gate/xexam.test.js",
     "target-run": "node scripts/target-run.js",
     "measure-x-latency": "node scripts/measure-x-latency.js",
     "test:arena": "node --test --test-concurrency=1 test-gate/arena.test.js",

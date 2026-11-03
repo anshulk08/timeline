@@ -7,6 +7,7 @@ import path from 'node:path';
 import { MODE, MODE_LABEL, CANDIDATE_MODELS, BREAKER_MODEL } from '../env.js';
 import { RUNS } from '../paths.js';
 import * as A from './agents.js';
+import { crossExamine, claimReply } from './xexam.js';
 import { grokbotVerifyOn, buildVerifyJob, dispatchVerify } from './grokbot-verify.js';
 const FIX_ATTEMPTS = Math.max(1, Number(process.env.FIX_ATTEMPTS || 2)); // per candidate; attempt 2 gets attempt 1's diff + failure output (REAL only)
 import {
@@ -22,7 +23,7 @@ export class TargetPipeline extends EventEmitter {
   constructor({ cfg, agents = {}, models, runsDir = RUNS } = {}) {
     super();
     this.cfg = typeof cfg === 'object' && cfg ? cfg : loadTarget(cfg);
-    this.agents = { ...A, ...agents };
+    this.agents = { ...A, crossExamine, ...agents };
     this.models = models || CANDIDATE_MODELS;
     this.mode = MODE;
     this.fixer = { name: `grok candidates x${this.models.length} (${this.models.join(', ')})` };
@@ -80,6 +81,7 @@ export class TargetPipeline extends EventEmitter {
       rec.verdict = v;
       this.log(rec, 'classify', `${v.category.toUpperCase()} (${v.mode})${v.signature ? ` sig=${v.signature}` : ''}: ${v.reason || v.summary || ''}`);
       if (v.category === 'attack') { rec.status = 'refused'; rec.reply = `@${post.author} Not doing that: requests touching accounts, permissions, secrets or safety checks are refused automatically.`; return this.finish(rec); }
+      if (v.category === 'claim') return this.claimJob(rec, post);
       if (v.category !== 'bug') { rec.status = v.category === 'feature' ? 'logged-feature' : 'ignored'; return this.finish(rec); }
       const ex = this.issues.get(v.signature);
       if (ex && !['failed', 'not-reproduced', 'blocked'].includes(ex.status)) { rec.status = 'duplicate'; rec.duplicateOf = ex.firstPostId; return this.finish(rec); }
@@ -90,6 +92,22 @@ export class TargetPipeline extends EventEmitter {
       this.queue = job.catch(() => {});
       return job;
     } catch (e) { rec.status = 'error'; rec.error = e.message; return this.finish(rec); }
+  }
+
+  // ---- earnings-call claim: hand off to Cross-Examination (no fix pipeline) ----
+  async claimJob(rec, post) {
+    rec.status = 'cross-examining'; this.update(rec);
+    const r = await this.timed(rec, 'xexam', async () => {
+      const out = await this.agents.crossExamine(post, { onStarted: (examId) => { rec.examId = examId; this.ev('xexam_started', { id: rec.id, postId: rec.id, examId }); this.log(rec, 'xexam', `cross-examination ${examId} started`); } });
+      return out.status === 'unavailable' ? { ...out, __status: 'error' } : out;
+    });
+    const { __status, ...res } = r;
+    rec.xexam = res; rec.examId = res.examId;
+    this.ev('xexam_done', { id: rec.id, postId: rec.id, examId: res.examId, status: res.status, ms: res.ms, claims: res.claims, ...(res.dodge ? { dodge: res.dodge } : {}), call: res.call, receiptUrl: res.receiptUrl, ...(res.error ? { error: res.error } : {}) });
+    this.log(rec, 'xexam', res.status === 'unavailable' ? `cross-examination unavailable: ${res.error}` : `${res.status}: ${res.claims.map((c) => c.verdict).join(', ') || 'no claims'} (${(res.ms / 1000).toFixed(1)}s) ${res.receiptUrl}`);
+    rec.status = res.status === 'unavailable' ? 'xexam-unavailable' : `xexam-${res.status}`;
+    rec.reply = claimReply(post.author, res);
+    return this.finish(rec);
   }
 
   // ---- reproduction: one failing test, must FAIL on unfixed code; one retry ----
