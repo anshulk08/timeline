@@ -6,7 +6,7 @@ import { searchMentions } from '../src/listener/xsearch.js';
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? Number(process.argv[i + 1]) : d; };
 const interval = arg('interval', 5) * 1000, maxS = arg('max', 600);
 if (MODE !== 'REAL') { console.error('No XAI_API_KEY in ~/grokathon/.env (MOCK mode). Add the key, then rerun. Nothing measured.'); process.exit(2); }
-const token = `cc-${Math.random().toString(36).slice(2, 8)}-${Date.now().toString(36)}`;
+const token = `cc${Math.random().toString(36).slice(2, 8)}${Date.now().toString(36)}`; // alphanumeric so X keyword search treats it as one token
 console.log(`\n1) Post this on X now (any account; include it verbatim):\n\n   ${token} testing @${process.env.APP_X_HANDLE || 'jotterapp'} export is broken\n`);
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 await rl.question('2) Press Enter the moment the post is live... ');
@@ -18,11 +18,13 @@ while ((Date.now() - t0) / 1000 < maxS) {
   const ps = Date.now();
   let res;
   try { res = await searchMentions({ query: token }); } catch (e) { console.log(`poll ${polls}: error ${e.message}`); await new Promise((r) => setTimeout(r, interval)); continue; }
-  const hit = res.posts.find((p) => (p.text || '').includes(token));
+  const hit = res.posts.find((p) => (p.text || '').toLowerCase().includes(token));
   const el = ((Date.now() - t0) / 1000).toFixed(1);
   console.log(`poll ${polls} @ ${el}s: ${res.posts.length} posts returned, api ${res.apiMs} ms${hit ? '  <-- FOUND' : ''}`);
   if (hit) {
-    console.log(`\nRESULT: found after ${el}s (${polls} polls; last poll api latency ${res.apiMs} ms). url=${hit.url || '?'} created_at=${hit.created_at || '?'}`);
+    const created = Date.parse(hit.created_at);
+    const lag = Number.isFinite(created) ? `${((Date.now() - created) / 1000).toFixed(1)}s after X created_at` : 'created_at unavailable';
+    console.log(`\nRESULT: found ${el}s after you pressed Enter; ${lag} (${polls} polls; last poll api latency ${res.apiMs} ms). url=${hit.url || '?'}`);
     process.exit(0);
   }
   const wait = interval - (Date.now() - ps);

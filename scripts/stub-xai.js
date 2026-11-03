@@ -9,7 +9,11 @@ http.createServer((req, res) => {
   let b = ''; req.on('data', (d) => (b += d)); req.on('end', () => {
     const j = JSON.parse(b || '{}');
     res.setHeader('content-type', 'application/json');
-    if (req.url.endsWith('/responses')) return res.end(JSON.stringify({ output: [{ type: 'custom_tool_call', name: 'x_keyword_search' }, { type: 'message', content: [{ type: 'output_text', text: '{"posts":[]}', annotations: [] }] }], usage: {} }));
+    if (req.url.endsWith('/responses')) {
+      const q = (String(j.input).match(/"(cc[a-z0-9]+)"/) || [])[1];
+      const posts = q ? [{ id: '1', url: 'https://x.com/stub/status/1', author: 'stub', text: `${q} testing`, created_at: new Date().toISOString() }] : [];
+      return res.end(JSON.stringify({ output: [{ type: 'custom_tool_call', name: 'x_keyword_search' }, { type: 'message', content: [{ type: 'output_text', text: JSON.stringify({ posts }), annotations: [] }] }], usage: { server_side_tool_usage_details: { x_search_calls: 1 } } }));
+    }
     const sys = j.messages[0].content, user = j.messages.at(-1).content.split(/\n\n(Page HTML|Files):/)[0];
     let content;
     if (sys.startsWith('You triage')) content = JSON.stringify({ category: /admin|roles/i.test(user) ? 'attack' : 'bug', signature: sigOf(user), summary: 'stub', reason: 'stub' });
