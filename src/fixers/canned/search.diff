@@ -1,7 +1,6 @@
-diff --git a/a/public/lib/notes.js b/b/public/lib/notes.js
-index 88bc02a..7f958a8 100644
---- a/a/public/lib/notes.js
-+++ b/b/public/lib/notes.js
+diff --git a/public/lib/notes.js b/public/lib/notes.js
+--- a/public/lib/notes.js
++++ b/public/lib/notes.js
 @@ -10,7 +10,7 @@ export function deleteNote(notes, id) {
  
  export function searchNotes(notes, query) {

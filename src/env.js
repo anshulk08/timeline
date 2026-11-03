@@ -1,0 +1,17 @@
+// Loads ~/grokathon/.env without ever printing values.
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+const ENV_FILE = process.env.GROKATHON_ENV || path.join(os.homedir(), 'grokathon', '.env');
+try {
+  for (const line of fs.readFileSync(ENV_FILE, 'utf8').split('\n')) {
+    const m = line.match(/^\s*([A-Z_][A-Z0-9_]*)\s*=\s*(.*?)\s*$/);
+    if (m && !(m[1] in process.env)) process.env[m[1]] = m[2].replace(/^['"]|['"]$/g, '');
+  }
+} catch {}
+const k = process.env.XAI_API_KEY || '';
+export const HAS_KEY = k.length > 10 && !/your-xai-key/i.test(k);
+export const MODE = process.env.FORCE_MOCK === '1' || !HAS_KEY ? 'MOCK' : 'REAL';
+export const MODEL = process.env.GROK_MODEL || 'grok-4.7';
+export const FAST_MODEL = process.env.GROK_FAST_MODEL || MODEL;
+export const X_HANDLE = process.env.APP_X_HANDLE || 'jotterapp';

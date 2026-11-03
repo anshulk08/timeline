@@ -9,7 +9,7 @@
     "bench": "node scripts/bench.js",
     "inject": "node scripts/inject.js",
     "test:app": "node scripts/test-live.js",
-    "test:gate": "node --test test-gate/",
+    "test:gate": "node --test test-gate/gate.test.js",
     "measure-x-latency": "node scripts/measure-x-latency.js"
   },
   "dependencies": {
