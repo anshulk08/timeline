@@ -11,7 +11,7 @@ agents = Grok classify / repro test / Fixer / Breaker; pipeline = the race).
 ```
 X post ─▶ Grok classify ─▶ Grok writes repro test ─▶ 2 Grok Fixers race ─▶ gate + on-disk recheck ─▶ tests + repro ─▶ Grok Breaker + referee ─▶ TIER (code)
                            (must FAIL on current      (fast model vs          (paths, forbid globs,                                                     AUTO: local commit on automaintainer-demo
-                            code, else retried)        grok-4.7, own worktree) forbidden identifiers)                                                 PR:   local branch + runs/pr/<id>.md
+                            code, else retried)        reasoning, own worktree) forbidden identifiers)                                                PR:   local branch + runs/pr/<id>.md
 ```
 Tier rule (`src/target/core.js`): AUTO only if every changed file matches `tiers.auto.globs`, changed lines ≤ `max_changed_lines`
 and nothing forbidden is hit; anything else that passes is PR; a forbidden hit is BLOCKED.

@@ -1,5 +1,28 @@
 # Complaint→Commit: preliminary results
 
+## BDBI AutoMaintainer on SimpliEarn: REAL Grok, end to end through `TARGET=simpliearn npm start` + `npm run inject` (Nov 2 2026, ~8:03 to 8:12 pm EST)
+
+Both bugs are **seeded demo bugs** on the local branch `automaintainer-demo` (seed commit `aebe2d0`); nothing was pushed.
+Each run started from `targets/simpliearn/reset.sh`. Times are wall clock from the pipeline's own stage timestamps.
+Models: classify / repro test / Breaker = `grok-4.20-0309-non-reasoning`; race = fast vs reasoning candidate.
+
+| run | bug (expected tier) | classify | repro test (Grok-written, must fail first) | race: candidates → winner | Patch Arena (Grok Breaker + referee) | tier (code) | outcome | total |
+|---|---|---|---|---|---|---|---|---|
+| A | `qoq-endpoint-typo` (AUTO) | 0.88 s | 2.36 s, fails-before on attempt 1 (`frontend/components/automaintainer-repro.test.ts`) | 8.6 s: fast vs grok-4.7 → **fast** won (2 lines), grok-4.7 cancelled | 2 attacks admitted, 2 survived, 0 killed (5.1 s) | AUTO (1 file in auto globs, 2 ≤ 8 lines) | local commit `1285e12` on automaintainer-demo (commit 0.14 s, ff 0.03 s) | 12.3 s |
+| B1 | `stock-pct-base` (PR) | 0.80 s | 7.5 s, fails-before (attempt 1 had tried to overwrite the existing test; fixed: code now picks the file name) | fast: fell for the trap (repro still fails); grok-4.7: **timed out at 120 s** | none | none | **failed** (no candidate passed) | ~129 s |
+| B2 | `stock-pct-base` (PR) | 0.92 s | 9.4 s, fails-before | 170 s: fast failed twice (attempt 2 got attempt 1's diff + failure output); grok-4.20-0309-reasoning failed attempt 1, **won on attempt 2** with the reference-equivalent fix (2 lines) | 0 admitted, 2 rejected (attack files collided with existing tests; fixed after this run) | PR (`RAG/stockchartgenerationV2.py` not in auto globs) | branch `automaintainer/fix-stock-pct-base` `466b1d6` + `runs/pr/stock-pct-base.md` | 181 s |
+| B3 | `stock-pct-base` (PR) | 0.86 s | 9.3 s, fails-before (`RAG/tests/test_automaintainer_repro.py`) | 13.2 s: **fast** won on attempt 1 (`perfect_hours_df['Close'].iloc[0]`, same as the reference fix), reasoning cancelled | 1 admitted (survived), 1 rejected (fails on the hidden reference fix), 0 killed (7.2 s) | PR | branch `automaintainer/fix-stock-pct-base` `a93ae7b` + `runs/pr/stock-pct-base.md` | 23.8 s |
+
+Checked by hand after B3: on the PR branch the seeded RAG tests + the Grok repro test pass (5 passed); frontend still shows the
+other seeded bug (11 pass, 2 fail), as expected. The fast model avoided the trap in B3 but not in B1/B2, so the race and the
+retry matter. Saved artifacts: `runs/real-integrated-auto-1285e12.patch.txt`, `runs/real-integrated-pr-466b1d6.patch.txt`,
+`runs/real-integrated-pr-a93ae7b.patch.txt`, `runs/real-integrated-pr-stock-pct-base.md`; screenshots `runs/screens/live-simpliearn-auto.png`,
+`runs/screens/live-simpliearn-pr.png` (B3), `runs/screens/live-simpliearn-pr-attempt1-failed.png` (B1). Grok spend for these 4 runs: roughly $0.3–0.6 (estimate, not metered).
+Changes made because of these runs: repro/attack file names chosen by code, one Fixer retry per candidate with feedback,
+default race = `grok-4.20-0309-non-reasoning` + `grok-4.20-0309-reasoning` (grok-4.7 is too slow for a 120 s Fixer timeout).
+`TARGET=jotter npm run test:gate`: 9/9 pass after all changes; `npm run test:target`: 6/6.
+
+
 Measured Nov 2 2026, 5:17–5:20 pm EST, on Anshul's Mac (Node 24.2, Playwright 1.64 headless Chromium).
 **No xAI key was present, so every number below is MOCK or LOCAL-STUB. Nothing has run against real Grok or real X.**
 
