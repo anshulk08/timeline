@@ -37,6 +37,13 @@ if (srcArg === 'xsearch' || srcArg === 'both') {
     listeners.push(xs);
   } catch (e) { console.log(`xsearch listener disabled: ${e.message}`); }
 }
+if (srcArg === 'xapi' || srcArg === 'both' || (process.env.X_BEARER_TOKEN && srcArg !== 'inject-only')) {
+  try {
+    const xa = createListener('xapi', (p) => { send('log', { t: Date.now(), stage: 'x-api', msg: `X API mention: @${p.author}: ${p.text}` }); pipeline.handlePost(p).catch(() => {}); }, { onPoll: (s) => send('poll', { ...s, t: Date.now() }) });
+    listeners.push(xa);
+    console.log('xapi listener: watching X mentions of @' + (process.env.APP_X_HANDLE || '?'));
+  } catch (e) { console.log(`xapi listener disabled: ${e.message}`); }
+}
 
 // Control API hardening: loopback bind, Host check (DNS rebinding), per-boot token on /api/*, JSON-only bodies
 // (blocks cross-site "simple" text/plain POSTs), same-origin Origin, 16 KB body cap.
