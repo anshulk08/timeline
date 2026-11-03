@@ -22,7 +22,13 @@ cd ~/grokathon/complaint-commit && set -a && . ../.env && set +a       # XAI_API
 TARGET=simpliearn npm start -- --source inject                          # control screen http://localhost:4100 (resets the demo branch)
 npm run inject -- "@SimpliEarn the QoQ comparison tab never loads for me, just spins and then errors out" judge   # AUTO bug
 npm run inject -- "@SimpliEarn NVDA chart says +250% after earnings, that's obviously wrong lol. the stock moved like 3%" judge   # PR bug
+npm run ingest-x -- https://x.com/anon173918/status/2117425512339365924   # REAL X post: Grok x_search fetches it by URL (~3-5 s), then same pipeline
 ```
+
+- **Fetch from X** (box at the top of the control screen, or `npm run ingest-x -- <status url>`): Grok's x_search tool fetches that exact post (author, time, link shown as "fetched from X by Grok"); search-based mention discovery does not see new accounts, fetch-by-URL does.
+- **Grok Bot verifier:** with `GROKBOT_WEBHOOK_URL`/`GROKBOT_WEBHOOK_KEY` set, every winner (AUTO or PR) is also sent (fire-and-forget, <=3500 B) to the "AutoMaintainer Verify" Grok Bot routine: public base `18c545e` + seeded-bug patch + winning patch (`-U1`) + the bug's `grokbot_check` one-liner from `target.json`, run on Grok Bot's own cloud computer.
+- The control screen shows the run uuid; the pass/fail result lands in the Grok Bot chat / Runs tab (no inbound tunnel on this machine, so no callback).
+
 `npm run reset` (or the Reset bugs button) runs `targets/simpliearn/reset.sh` between runs. `http://localhost:4100/?demo=1` replays a
 canned run with no backend. One-shot CLI: `TARGET=simpliearn npm run target-run`. Real numbers: RESULTS.md.
 
