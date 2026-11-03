@@ -4,3 +4,4 @@ live/
 runs/
 .env
 *.log
+node_modules

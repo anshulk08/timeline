@@ -6,6 +6,8 @@ import { MODE } from './env.js';
 import { classify } from './gatekeeper.js';
 import { makePlan, runPlan } from './reproducer.js';
 import { getFixer } from './fixers/index.js';
+import { grokbotConfig } from './grokbot/config.js';
+import { GrokBot } from './grokbot/client.js';
 import { gateAndTest, deploy, readAllowlisted, startLive, stopLive } from './shipper.js';
 import { runAppTests } from './tests.js';
 import { LIVE, APP_PORT, STAGING_PORT, RUNS, CONTROL_PORT } from './paths.js';
@@ -13,7 +15,7 @@ import { reset as resetApp } from '../scripts/reset.js';
 
 let seq = 0;
 export class Pipeline extends EventEmitter {
-  constructor({ fixer } = {}) {
+  constructor({ fixer, grokbot } = {}) {
     super();
     this.fixer = fixer && typeof fixer === 'object' ? fixer : getFixer(fixer);
     this.mode = MODE;
@@ -21,6 +23,46 @@ export class Pipeline extends EventEmitter {
     this.issues = new Map();
     this.queue = Promise.resolve();
     fs.mkdirSync(RUNS, { recursive: true });
+    // Grok Bot handoff: explicit option wins; otherwise on only when env/tunnel config is complete.
+    if (grokbot !== undefined) this.grokbot = grokbot;
+    else { const cfg = grokbotConfig(); this.grokbot = cfg.enabled ? new GrokBot(cfg) : null; }
+    if (this.grokbot) this.grokbot.log = (m) => this.log(null, 'grokbot', m);
+  }
+
+  // Reproducer stage. Grok Bot (cloud browser) when configured; Playwright otherwise or as labelled fallback.
+  // Returns {plan, repro}; repro.by is 'grokbot' | 'playwright' | 'playwright-fallback'.
+  async reproduce(rec, issue, liveUrl, shot) {
+    const p = await makePlan(issue, liveUrl); // still needed for staging re-repro + post-deploy verify
+    const plan = p.plan || null;
+    const pw = async () => (plan ? runPlan(plan, liveUrl, shot) : { reproduced: false, failures: ['no plan'] });
+    if (!this.grokbot) {
+      const r = await pw();
+      rec.reproducer = { by: 'playwright', label: 'Playwright (local)' };
+      this.log(rec, 'reproduce', r.reproduced ? `REPRODUCED (Playwright, local): ${r.failures.join('; ')}${r.consoleErrors?.length ? ` | console: ${r.consoleErrors[0]}` : ''}` : `NOT reproduced (Playwright): ${r.failures.join('; ') || 'all expectations held'} -> stop`);
+      return { plan, repro: { ...r, by: 'playwright' } };
+    }
+    const gb = this.grokbot;
+    rec.reproducer = { by: 'grokbot', label: gb.label, target: gb.target, status: 'waiting' };
+    this.log(rec, 'reproduce', `handing off to ${gb.label} [${gb.target}]; waiting up to ${(gb.cfg.timeoutMs / 1000).toFixed(0)}s for callback`);
+    this.update(rec);
+    const g = await gb.reproduce({ complaint: rec.post.text, author: rec.post.author, name: rec.id });
+    if (!g.ok) {
+      const r = await pw();
+      rec.reproducer = { by: 'playwright-fallback', label: `Playwright FALLBACK (${gb.label}: ${g.error})`, target: gb.target, job_id: g.job_id, error: g.error };
+      this.log(rec, 'reproduce', `${gb.label} gave no result (${g.error}) -> FALLBACK to local Playwright: ${r.reproduced ? 'REPRODUCED ' + r.failures.join('; ') : 'NOT reproduced -> stop'}`);
+      return { plan, repro: { ...r, by: 'playwright-fallback' } };
+    }
+    const res = g.result;
+    rec.reproducer = { by: 'grokbot', label: gb.label, target: gb.target, job_id: g.job_id, steps: res.steps, observed: res.observed, screenshot_url: res.screenshot_url || null, waitMs: g.waitMs };
+    if (g.screenshotFile) rec.screenshot = `/runs/${path.basename(g.screenshotFile)}`;
+    this.log(rec, 'reproduce', `${gb.label} [${gb.target}] -> ${res.reproduced ? 'REPRODUCED' : 'NOT reproduced'} in ${(g.waitMs / 1000).toFixed(1)}s (${res.steps.length} steps): ${res.observed}`);
+    const repro = { reproduced: res.reproduced, failures: [res.observed], consoleErrors: [], screenshot: g.screenshotFile || null, by: 'grokbot' };
+    if (res.reproduced && gb.cfg.crossCheck && plan) {
+      const x = await runPlan(plan, liveUrl, null);
+      rec.reproducer.crossCheck = { reproduced: x.reproduced, failures: x.failures };
+      this.log(rec, 'reproduce', `Playwright cross-check: ${x.reproduced ? 'agrees (REPRODUCED)' : 'DISAGREES (expectations held); continuing on Grok Bot verdict, staging re-repro + tests still gate the fix'}`);
+    }
+    return { plan, repro };
   }
 
   log(rec, stage, msg) {
@@ -35,7 +77,7 @@ export class Pipeline extends EventEmitter {
     if (reset) { resetApp(); this.issues.clear(); this.records = []; }
     if (!(await startLive())) throw new Error('live app failed to start');
     this.baseline = await runAppTests(LIVE, STAGING_PORT);
-    this.log(null, 'boot', `${this.mode} mode, fixer=${this.fixer.name}. live app on :${APP_PORT}. baseline tests: ${this.baseline.pass.length} pass / ${this.baseline.fail.length} fail [${this.baseline.fail.join(', ')}]`);
+    this.log(null, 'boot', `${this.mode} mode, fixer=${this.fixer.name}, reproducer=${this.grokbot ? this.grokbot.describe() : 'Playwright (local)'}. live app on :${APP_PORT}. baseline tests: ${this.baseline.pass.length} pass / ${this.baseline.fail.length} fail [${this.baseline.fail.join(', ')}]`);
     this.emit('reset');
   }
 
@@ -101,14 +143,9 @@ export class Pipeline extends EventEmitter {
       issue.status = 'in-progress'; rec.status = 'reproducing';
       const liveUrl = `http://127.0.0.1:${APP_PORT}`;
       const shot = path.join(RUNS, `${rec.id}-repro.png`);
-      const { plan, repro } = await this.timed(rec, 'reproduce', async () => {
-        const p = await makePlan(issue, liveUrl);
-        if (!p.plan) return { plan: null, repro: { reproduced: false, failures: ['no plan'] } };
-        const r = await runPlan(p.plan, liveUrl, shot);
-        return { plan: p.plan, planSource: p.source, repro: r };
-      });
-      rec.plan = plan; rec.repro = repro; rec.screenshot = repro.screenshot ? `/runs/${path.basename(shot)}` : null;
-      this.log(rec, 'reproduce', repro.reproduced ? `REPRODUCED (Playwright stand-in for Grok Bot): ${repro.failures.join('; ')}${repro.consoleErrors?.length ? ` | console: ${repro.consoleErrors[0]}` : ''}` : `NOT reproduced: ${repro.failures.join('; ') || 'all expectations held'} -> stop`);
+      const { plan, repro } = await this.timed(rec, 'reproduce', () => this.reproduce(rec, issue, liveUrl, shot));
+      rec.plan = plan; rec.repro = repro;
+      if (!rec.screenshot) rec.screenshot = repro.screenshot ? `/runs/${path.basename(repro.screenshot)}` : null;
       if (!repro.reproduced) { issue.status = rec.status = 'not-reproduced'; rec.reply = `@${rec.post.author} Thanks! We couldn't reproduce that. Mind sharing steps?`; return this.finish(rec); }
 
       rec.status = 'fixing';

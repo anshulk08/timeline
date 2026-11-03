@@ -51,6 +51,8 @@
   h2 { font-size:12px; text-transform:uppercase; letter-spacing:.8px; color:var(--dim); margin:0 0 10px; }
   a { color:var(--run); }
   .empty { color:var(--dim); padding:20px 0; }
+  .rp { margin-top:8px; font:12px var(--mono); } .rp-by { font-weight:600; color:var(--run); } .rp.fb .rp-by { color:var(--warn); }
+  .dim { color:var(--dim); font:12px var(--mono); } .steps { margin:6px 0; padding-left:20px; font:12px var(--mono); } .obs { font-size:13px; margin:4px 0; }
 </style>
 </head>
 <body>
@@ -117,9 +119,20 @@ function card(r) {
     ${r.verdict?.reason && v === 'attack' ? `<div class="reasons">${esc(r.verdict.reason)}</div>` : ''}
     ${r.gate && !r.gate.ok ? `<div class="reasons">${r.gate.reasons.map(esc).join('<br>')}</div>` : ''}
     ${r.reply ? `<div class="reply"><small>draft reply (not posted)</small>${esc(r.reply)}</div>` : ''}
-    ${r.screenshot ? `<details><summary>reproduction screenshot (Playwright stand-in for Grok Bot)${r.repro ? ': ' + esc(r.repro.failures.join('; ')) : ''}</summary><img class="shot" src="${esc(r.screenshot)}" alt="reproduction screenshot"></details>` : ''}
+    ${reproBlock(r)}
     ${r.diff ? `<details><summary>patch</summary><pre>${esc(r.diff)}</pre></details>` : ''}
   </div>`;
+}
+function reproBlock(r) {
+  const rp = r.reproducer; if (!rp && !r.screenshot) return '';
+  const by = rp?.by || 'playwright';
+  const cls = by === 'grokbot' ? (rp.target === 'REAL' ? 'real' : 'mock') : by === 'playwright-fallback' ? 'fb' : '';
+  const head = `<div class="rp ${cls}"><span class="rp-by">${esc(rp?.label || 'Playwright (local)')}</span>${rp?.target && by === 'grokbot' ? ` <span class="tag ${rp.target === 'REAL' ? 'real' : 'mock'}">${esc(rp.target)}</span>` : ''}${rp?.status === 'waiting' && r.stages.reproduce?.status === 'running' ? ' <span class="dim">waiting for callback...</span>' : ''}${rp?.waitMs ? ` <span class="dim">${sec(rp.waitMs)}</span>` : ''}</div>`;
+  const steps = rp?.steps?.length ? `<ol class="steps">${rp.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : '';
+  const obs = rp?.observed ? `<div class="obs">${esc(rp.observed)}</div>` : (r.repro?.failures ? `<div class="obs">${esc(r.repro.failures.join('; '))}</div>` : '');
+  const xc = rp?.crossCheck ? `<div class="dim">Playwright cross-check: ${rp.crossCheck.reproduced ? 'agrees' : 'disagrees'}</div>` : '';
+  const shot = r.screenshot ? `<img class="shot" src="${esc(r.screenshot)}" alt="reproduction screenshot">` : (rp?.screenshot_url && /^https:\/\//.test(rp.screenshot_url) ? `<a href="${esc(rp.screenshot_url)}" target="_blank" rel="noopener noreferrer">screenshot link</a>` : '');
+  return head + (steps || obs || shot ? `<details${by === 'grokbot' ? ' open' : ''}><summary>reproduction${steps ? ' steps' : ''} + screenshot</summary>${steps}${obs}${xc}${shot}</details>` : '');
 }
 function render() {
   const list = [...recs.values()].reverse();
@@ -134,7 +147,7 @@ const es = new EventSource('/events');
 es.addEventListener('hello', (m) => {
   const h = JSON.parse(m.data);
   $('mode').textContent = h.mode; $('mode').className = 'tag ' + h.mode.toLowerCase();
-  $('meta').textContent = `fixer=${h.fixer} · listeners=${h.listeners.join('+')} · @${h.handle}`;
+  $('meta').textContent = `fixer=${h.fixer} · reproducer=${h.reproducer ? h.reproducer.label + (h.reproducer.target !== 'local' ? ' [' + h.reproducer.target + ']' : '') : 'Playwright'} · listeners=${h.listeners.join('+')} · @${h.handle}`;
   $('applink').href = h.appUrl;
   recs.clear(); for (const r of h.records) recs.set(r.id, r); render();
 });

@@ -10,7 +10,10 @@
     "inject": "node scripts/inject.js",
     "test:app": "node scripts/test-live.js",
     "test:gate": "node --test test-gate/gate.test.js",
-    "measure-x-latency": "node scripts/measure-x-latency.js"
+    "measure-x-latency": "node scripts/measure-x-latency.js",
+    "tunnel": "node scripts/tunnel.js",
+    "fake-grokbot": "node scripts/fake-grokbot.js",
+    "test:grokbot": "node --test --test-concurrency=1 test-grokbot/grokbot.test.js"
   },
   "dependencies": {
     "playwright": "^1.64.1"

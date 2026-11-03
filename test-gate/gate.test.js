@@ -60,6 +60,6 @@ test('rollback: a deploy whose post-deploy live check fails is reverted and the 
   const log = execFileSync('git', ['log', '--oneline', '-n', '3'], { cwd: 'live' }).toString();
   assert.match(log, /Revert "bad deploy"/);
   assert.notEqual(fs.readFileSync('live/public/app.js', 'utf8'), 'syntax error here (((');
-  assert.equal((await fetch('http://127.0.0.1:4000/health')).ok, true);
+  assert.equal((await fetch(`http://127.0.0.1:${(await import('../src/paths.js')).APP_PORT}/health`)).ok, true);
   await stopLive(); await closeBrowser();
 });
