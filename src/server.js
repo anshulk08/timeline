@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { Pipeline } from './pipeline.js';
+import { TargetPipeline } from './target/pipeline.js';
+import { TARGET, isConfigTarget } from './target/core.js';
 import { createListener } from './listener/index.js';
 import { liveShow, liveLog, stopLive } from './shipper.js';
 import { stopAllChildren } from './proc.js';
@@ -11,7 +13,7 @@ import { ROOT, RUNS, CONTROL_PORT, APP_PORT } from './paths.js';
 import { MODE, MODE_LABEL, X_HANDLE } from './env.js';
 
 const srcArg = process.argv.includes('--source') ? process.argv[process.argv.indexOf('--source') + 1] : (MODE === 'REAL' ? 'both' : 'inject');
-const pipeline = new Pipeline();
+const pipeline = isConfigTarget() ? new TargetPipeline({ cfg: TARGET }) : new Pipeline();
 const clients = new Set();
 const send = (type, data) => { const msg = `event: ${type}\ndata: ${JSON.stringify(data)}\n\n`; for (const c of clients) c.write(msg); };
 const slim = (r) => ({ ...r, plan: r.plan });
@@ -20,6 +22,10 @@ pipeline.on('log', (e) => send('log', e));
 let arenaLog = []; // replayed in `hello` so a reload mid-arena shows the rounds so far
 pipeline.on('reset', () => { arenaLog = []; send('reset', {}); });
 pipeline.on('arena', (e) => { arenaLog.push(e); send('arena', e); }); // Patch Arena events, schema in ARENA.md
+// Config-target events (TARGET=<name>): repro_test, candidates, candidate, tier, auto_applied, pr_ready
+let targetLog = [];
+pipeline.on('reset', () => { targetLog = []; });
+for (const t of ['repro_test', 'candidates', 'candidate', 'tier', 'auto_applied', 'pr_ready']) pipeline.on(t, (e) => { targetLog.push({ type: t, ...e }); send(t, e); });
 
 const listeners = [];
 const inject = createListener('inject', (p) => pipeline.handlePost(p));
@@ -81,7 +87,7 @@ http.createServer(async (req, res) => {
   if (u.pathname === '/') { res.setHeader('content-type', 'text/html; charset=utf-8'); return res.end(html()); }
   if (u.pathname === '/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-    res.write(`event: hello\ndata: ${JSON.stringify({ mode: pipeline.mode, modeLabel: MODE_LABEL, fixer: pipeline.fixer.name, breaker: pipeline.breaker ? { name: pipeline.breaker.name, mode: pipeline.breaker.mode } : null, listeners: listeners.map((l) => l.name), handle: X_HANDLE, reproducer: pipeline.grokbot ? { label: pipeline.grokbot.label, target: pipeline.grokbot.target, publicAppUrl: pipeline.grokbot.cfg.publicAppUrl } : { label: 'Playwright (local)', target: 'local' }, appUrl: `http://localhost:${APP_PORT}`, records: pipeline.records.map(slim), arena: arenaLog, resetting })}\n\n`);
+    res.write(`event: hello\ndata: ${JSON.stringify({ mode: pipeline.mode, modeLabel: MODE_LABEL, fixer: pipeline.fixer.name, breaker: pipeline.breaker ? { name: pipeline.breaker.name, mode: pipeline.breaker.mode } : null, listeners: listeners.map((l) => l.name), handle: X_HANDLE, reproducer: pipeline.grokbot ? { label: pipeline.grokbot.label, target: pipeline.grokbot.target, publicAppUrl: pipeline.grokbot.cfg.publicAppUrl } : { label: 'Playwright (local)', target: 'local' }, appUrl: `http://localhost:${APP_PORT}`, records: pipeline.records.map(slim), arena: arenaLog, target: isConfigTarget() ? { name: pipeline.cfg.name, display_name: pipeline.cfg.display_name, repo: pipeline.cfg.repo, branch: pipeline.cfg.branch, events: targetLog } : null, resetting })}\n\n`);
     clients.add(res); req.on('close', () => clients.delete(res)); return;
   }
   if (u.pathname.startsWith('/changes/')) {
