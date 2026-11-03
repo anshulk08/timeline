@@ -6,3 +6,4 @@ runs/
 *.log
 .arena-ref/
 .arena-ref.patch
+node_modules

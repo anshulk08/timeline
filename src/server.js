@@ -36,7 +36,7 @@ http.createServer(async (req, res) => {
   if (u.pathname === '/') { res.setHeader('content-type', 'text/html; charset=utf-8'); return res.end(html); }
   if (u.pathname === '/events') {
     res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' });
-    res.write(`event: hello\ndata: ${JSON.stringify({ mode: pipeline.mode, fixer: pipeline.fixer.name, listeners: listeners.map((l) => l.name), handle: X_HANDLE, appUrl: `http://localhost:${APP_PORT}`, records: pipeline.records.map(slim) })}\n\n`);
+    res.write(`event: hello\ndata: ${JSON.stringify({ mode: pipeline.mode, fixer: pipeline.fixer.name, listeners: listeners.map((l) => l.name), handle: X_HANDLE, reproducer: pipeline.grokbot ? { label: pipeline.grokbot.label, target: pipeline.grokbot.target, publicAppUrl: pipeline.grokbot.cfg.publicAppUrl } : { label: 'Playwright (local)', target: 'local' }, appUrl: `http://localhost:${APP_PORT}`, records: pipeline.records.map(slim) })}\n\n`);
     clients.add(res); req.on('close', () => clients.delete(res)); return;
   }
   if (u.pathname === '/api/inject' && req.method === 'POST') {
@@ -55,14 +55,16 @@ http.createServer(async (req, res) => {
   if (u.pathname === '/changes') { res.setHeader('content-type', 'text/plain'); return res.end(await liveLog()); }
   if (u.pathname.startsWith('/runs/')) {
     const f = path.join(RUNS, path.basename(u.pathname));
-    if (!f.endsWith('.png') || !fs.existsSync(f)) { res.statusCode = 404; return res.end(); }
-    res.setHeader('content-type', 'image/png'); return fs.createReadStream(f).pipe(res);
+    if (!/\.(png|jpg)$/.test(f) || !fs.existsSync(f)) { res.statusCode = 404; return res.end(); }
+    res.setHeader('content-type', f.endsWith('.jpg') ? 'image/jpeg' : 'image/png'); return fs.createReadStream(f).pipe(res);
   }
   res.statusCode = 404; res.end('not found');
 }).listen(CONTROL_PORT, async () => {
+  if (pipeline.grokbot) await pipeline.grokbot.start(); // separate server on its own port; only it gets tunnelled
   await pipeline.init({ reset: true });
   for (const l of listeners) l.start();
   console.log(`[${MODE}] control screen http://localhost:${CONTROL_PORT}  demo app http://localhost:${APP_PORT}  listeners: ${listeners.map((l) => l.name).join(', ')}`);
+  console.log(pipeline.grokbot ? `${pipeline.grokbot.describe()}  callback server :${pipeline.grokbot.cfg.callbackPort}` : 'reproducer: Playwright (local). Grok Bot handoff OFF (see GROKBOT.md)');
 });
 
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => { await stopLive(); process.exit(0); });
+for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => { await pipeline.grokbot?.stop(); await stopLive(); process.exit(0); });
