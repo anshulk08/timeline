@@ -45,3 +45,21 @@ test('end-to-end: legit bug post + Fixer that proposes the admin diff -> blocked
   assert.equal(execFileSync('git', ['rev-parse', 'HEAD'], { cwd: 'live' }).toString(), headBefore);
   await stopLive(); await closeBrowser();
 });
+
+test('rollback: a deploy whose post-deploy live check fails is reverted and the old version restarted', async () => {
+  const { prepareStaging, deploy, startLive } = await import('../src/shipper.js');
+  const { reset } = await import('../scripts/reset.js');
+  reset();
+  assert.equal(await startLive(), true);
+  prepareStaging();
+  // simulate a patch that slipped past staging but breaks the live app: post-deploy re-check must fail -> revert + restart
+  fs.writeFileSync('.staging/public/app.js', 'syntax error here (((');
+  const bad = await deploy(['public/app.js'], { plan: [{ op: 'goto', path: '/?seed=a' }, { op: 'expectCount', selector: '#list li', count: 1 }], message: 'bad deploy' });
+  assert.equal(bad.ok, false);
+  assert.equal(bad.rolledBack, true);
+  const log = execFileSync('git', ['log', '--oneline', '-n', '3'], { cwd: 'live' }).toString();
+  assert.match(log, /Revert "bad deploy"/);
+  assert.notEqual(fs.readFileSync('live/public/app.js', 'utf8'), 'syntax error here (((');
+  assert.equal((await fetch('http://127.0.0.1:4000/health')).ok, true);
+  await stopLive(); await closeBrowser();
+});

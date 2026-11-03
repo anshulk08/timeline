@@ -1,6 +1,6 @@
 // Single xAI adapter. REAL when XAI_API_KEY exists, else callers use their deterministic MOCK path.
 import { MODE, MODEL } from './env.js';
-const BASE = 'https://api.x.ai/v1';
+const BASE = process.env.XAI_BASE_URL || 'https://api.x.ai/v1'; // override only for the local stub test
 const headers = () => ({ 'content-type': 'application/json', authorization: `Bearer ${process.env.XAI_API_KEY}` });
 
 export const llmMode = () => MODE;

@@ -24,6 +24,8 @@ export async function waitHealthy(port, timeoutMs = 5000) {
 
 // Start an app server from dir on port; resolves with handle once /health is ok.
 export async function startApp(dir, port) {
+  try { await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(300) }); throw new Error(`port ${port} already serving (orphaned app server?) - kill it first`); }
+  catch (e) { if (String(e.message).startsWith('port ')) throw e; }
   const child = spawn(process.execPath, ['server.js'], { cwd: dir, env: { ...process.env, PORT: String(port) }, stdio: 'ignore' });
   const ok = await waitHealthy(port);
   return { child, ok, stop: () => new Promise((r) => { if (child.exitCode !== null) return r(); child.once('exit', r); child.kill('SIGTERM'); }) };
